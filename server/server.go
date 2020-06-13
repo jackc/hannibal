@@ -23,6 +23,12 @@ type Config struct {
 	DatabaseURL   string
 }
 
+type Handler struct {
+	Method  string
+	Pattern string
+	SQL     string
+}
+
 func Serve(config *Config) {
 	log := zerolog.New(os.Stdout).With().
 		Timestamp().
@@ -59,10 +65,18 @@ func Serve(config *Config) {
 
 	r.Use(middleware.Recoverer)
 
-	r.Method("GET", "/hey", &PGJSONHandler{
-		DB:  db,
-		SQL: "select json_build_object('time', now())",
-	})
+	var handlers []Handler
+	err = pgxutil.SelectAllStruct(context.Background(), db, &handlers, "select method, pattern, sql from handlers")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to read handlers")
+	}
+
+	for _, h := range handlers {
+		r.Method(h.Method, h.Pattern, &PGJSONHandler{
+			DB:  db,
+			SQL: h.SQL,
+		})
+	}
 
 	server := &http.Server{
 		Addr:    config.ListenAddress,
