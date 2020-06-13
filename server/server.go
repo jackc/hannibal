@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/jackc/foobarbuilder/current"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgxutil"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
@@ -58,7 +59,10 @@ func Serve(config *Config) {
 
 	r.Use(middleware.Recoverer)
 
-	r.Method("GET", "/hey", &PGJSONHandler{DB: db})
+	r.Method("GET", "/hey", &PGJSONHandler{
+		DB:  db,
+		SQL: "select json_build_object('time', now())",
+	})
 
 	server := &http.Server{
 		Addr:    config.ListenAddress,
@@ -92,5 +96,12 @@ type PGJSONHandler struct {
 }
 
 func (h *PGJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello, world!"))
+	buf, err := pgxutil.SelectByteSlice(r.Context(), h.DB, h.SQL)
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+
+	w.Write(buf)
 }
