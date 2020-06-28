@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,6 +11,11 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/jackc/foobarbuilder/current"
+	"github.com/jackc/pgtype"
+	pgtypeuuid "github.com/jackc/pgtype/ext/gofrs-uuid"
+	shopspring "github.com/jackc/pgtype/ext/shopspring-numeric"
+	"github.com/jackc/pgtype/pgxtype"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/pgxutil"
 	"github.com/rs/zerolog"
@@ -23,10 +29,16 @@ type Config struct {
 	DatabaseURL   string
 }
 
+type HandlerParam struct {
+	Name       string
+	Converters []map[string]interface{}
+}
+
 type Handler struct {
 	Method  string
 	Pattern string
 	SQL     string
+	Params  []HandlerParam
 }
 
 func Serve(config *Config) {
@@ -39,6 +51,7 @@ func Serve(config *Config) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to parse database connection string")
 	}
+	dbconfig.AfterConnect = RegisterDataTypes
 
 	db, err := pgxpool.ConnectConfig(context.Background(), dbconfig)
 	if err != nil {
@@ -66,16 +79,25 @@ func Serve(config *Config) {
 	r.Use(middleware.Recoverer)
 
 	var handlers []Handler
-	err = pgxutil.SelectAllStruct(context.Background(), db, &handlers, "select method, pattern, sql from handlers")
+	err = pgxutil.SelectAllStruct(context.Background(), db, &handlers, "select * from get_handlers()")
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to read handlers")
 	}
 
 	for _, h := range handlers {
-		r.Method(h.Method, h.Pattern, &PGJSONHandler{
-			DB:  db,
-			SQL: h.SQL,
-		})
+		fmt.Println(h)
+		// TODO - params need to be parsed into something and used in PGJSONHandler.ServeHTTP
+		jh := &PGJSONHandler{
+			DB:     db,
+			SQL:    h.SQL,
+			Params: make([]PGJSONHandlerParam, len(h.Params)),
+		}
+		for i := range h.Params {
+			jh.Params[i].Name = h.Params[i].Name
+		}
+
+		fmt.Println(jh)
+		r.Method(h.Method, h.Pattern, jh)
 	}
 
 	server := &http.Server{
@@ -104,13 +126,23 @@ func Serve(config *Config) {
 
 }
 
+type PGJSONHandlerParam struct {
+	Name string
+}
+
 type PGJSONHandler struct {
-	DB  *pgxpool.Pool
-	SQL string
+	DB     *pgxpool.Pool
+	SQL    string
+	Params []PGJSONHandlerParam
 }
 
 func (h *PGJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	buf, err := pgxutil.SelectByteSlice(r.Context(), h.DB, h.SQL)
+	args := make([]interface{}, len(h.Params))
+	for i := range h.Params {
+		args[i] = r.URL.Query().Get(h.Params[i].Name)
+	}
+
+	buf, err := pgxutil.SelectByteSlice(r.Context(), h.DB, h.SQL, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -118,4 +150,38 @@ func (h *PGJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
 	w.Write(buf)
+}
+
+func RegisterDataTypes(ctx context.Context, conn *pgx.Conn) error {
+	conn.ConnInfo().RegisterDataType(pgtype.DataType{
+		Value: &pgtypeuuid.UUID{},
+		Name:  "uuid",
+		OID:   pgtype.UUIDOID,
+	})
+	conn.ConnInfo().RegisterDataType(pgtype.DataType{
+		Value: &shopspring.Numeric{},
+		Name:  "numeric",
+		OID:   pgtype.NumericOID,
+	})
+
+	dataTypeNames := []string{
+		"handler_param",
+		"_handler_param",
+		"handler",
+		"_handler",
+		"get_handler_result_row_param",
+		"_get_handler_result_row_param",
+		"get_handler_result_row",
+		"_get_handler_result_row",
+	}
+
+	for _, typeName := range dataTypeNames {
+		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), typeName)
+		if err != nil {
+			return err
+		}
+		conn.ConnInfo().RegisterDataType(dataType)
+	}
+
+	return nil
 }
