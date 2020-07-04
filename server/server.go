@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/jackc/foobarbuilder/current"
+	"github.com/jackc/foobarbuilder/db"
 	"github.com/jackc/pgtype"
 	pgtypeuuid "github.com/jackc/pgtype/ext/gofrs-uuid"
 	shopspring "github.com/jackc/pgtype/ext/shopspring-numeric"
@@ -53,7 +54,7 @@ func Serve(config *Config) {
 	}
 	dbconfig.AfterConnect = RegisterDataTypes
 
-	db, err := pgxpool.ConnectConfig(context.Background(), dbconfig)
+	dbpool, err := pgxpool.ConnectConfig(context.Background(), dbconfig)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to connect to database")
 	}
@@ -79,7 +80,7 @@ func Serve(config *Config) {
 	r.Use(middleware.Recoverer)
 
 	var handlers []Handler
-	err = pgxutil.SelectAllStruct(context.Background(), db, &handlers, "select * from get_handlers()")
+	err = pgxutil.SelectAllStruct(context.Background(), dbpool, &handlers, fmt.Sprintf("select * from %s.get_handlers()", db.FoobarbuilderSchema))
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to read handlers")
 	}
@@ -88,7 +89,7 @@ func Serve(config *Config) {
 		fmt.Println(h)
 		// TODO - params need to be parsed into something and used in PGJSONHandler.ServeHTTP
 		jh := &PGJSONHandler{
-			DB:     db,
+			DB:     dbpool,
 			SQL:    h.SQL,
 			Params: make([]PGJSONHandlerParam, len(h.Params)),
 		}
@@ -176,7 +177,7 @@ func RegisterDataTypes(ctx context.Context, conn *pgx.Conn) error {
 	}
 
 	for _, typeName := range dataTypeNames {
-		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), typeName)
+		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), fmt.Sprintf("%s.%s", db.FoobarbuilderSchema, typeName))
 		if err != nil {
 			return err
 		}

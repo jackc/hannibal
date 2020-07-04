@@ -30,7 +30,7 @@ func Develop(config *Config) {
 		log.Fatal().Err(err).Msg("failed to parse database connection string")
 	}
 
-	db.MaintainSystem(context.Background(), dbconfig.ConnConfig)
+	err = db.MaintainSystem(context.Background(), dbconfig.ConnConfig)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to maintain system")
 	}
