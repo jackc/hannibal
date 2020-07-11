@@ -14,11 +14,11 @@ CLOBBER.include("tmp")
 
 directory "tmp/development/bin"
 
-file "db/statik/statik.go" => FileList["db/foobarbuilder_migrations/*"] do
-  sh "statik -src db/foobarbuilder_migrations -dest db"
+file "embed/statik/statik.go" => FileList["embed/root/**/*"] do
+  sh "statik -src embed/root -dest embed"
 end
 
-file "tmp/development/bin/foobarbuilder" => ["db/statik/statik.go", *FileList["**/*.go"]] do |t|
+file "tmp/development/bin/foobarbuilder" => ["embed/statik/statik.go", *FileList["**/*.go"]] do |t|
   sh "go build -o tmp/development/bin/foobarbuilder"
 end
 

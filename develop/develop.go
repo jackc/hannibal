@@ -2,7 +2,6 @@ package develop
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -49,7 +48,7 @@ func Develop(config *Config) {
 	for {
 		select {
 		case event := <-watcher.Events:
-			fmt.Println(event)
+			log.Info().Str("name", event.Name).Str("op", event.Op.String()).Msg("file change detected")
 		case err := <-watcher.Errors:
 			log.Fatal().Err(err).Msg("file system watcher error")
 		}

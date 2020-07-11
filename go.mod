@@ -9,7 +9,7 @@ require (
 	github.com/jackc/pgtype v1.4.0
 	github.com/jackc/pgx/v4 v4.7.1
 	github.com/jackc/pgxutil v0.0.0-20200703204206-37866e09a15b
-	github.com/jackc/tern v1.12.2-0.20200704220057-fea69f49b5c2
+	github.com/jackc/tern v1.12.2-0.20200711223825-7cd897735b6f
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/rakyll/statik v0.1.7
 	github.com/rs/zerolog v1.19.0

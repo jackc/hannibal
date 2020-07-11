@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgxutil"
 	"github.com/jackc/tern/migrate"
 
-	_ "github.com/jackc/foobarbuilder/db/statik"
+	_ "github.com/jackc/foobarbuilder/embed/statik"
 	"github.com/rakyll/statik/fs"
 )
 
@@ -47,13 +47,13 @@ func MaintainSystem(ctx context.Context, connConfig *pgx.ConnConfig) error {
 	if err != nil {
 		return err
 	}
-	migrator.OnStart = func(sequence int32, name string, sql string) {
+	migrator.OnStart = func(ctx context.Context, sequence int32, name string, sql string) {
 		current.Logger(ctx).Info().Int32("sequence", sequence).Str("name", name).Msg("beginning migration")
 	}
 	migrator.Data = map[string]interface{}{
 		"foobarbuilderSchema": FoobarbuilderSchema,
 	}
-	err = migrator.LoadMigrations("/")
+	err = migrator.LoadMigrations("/system_migrations")
 	if err != nil {
 		return err
 	}
