@@ -31,8 +31,9 @@ type Config struct {
 }
 
 type HandlerParam struct {
-	Name       string
-	Converters []map[string]interface{}
+	Name        string
+	ParamTypeID string
+	Required    bool
 }
 
 type Handler struct {

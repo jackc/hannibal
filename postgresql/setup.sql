@@ -3,6 +3,6 @@ select foobarbuilder.create_handler(
   '/hey',
   'select json_build_object(''time'', now(), ''name'', $1::text)',
   array[
-    foobarbuilder.build_handler_param('name', '[]'::jsonb)
+    foobarbuilder.build_handler_param('name', 'text', true)
   ]
 );
