@@ -18,8 +18,8 @@ file "embed/statik/statik.go" => FileList["embed/root/**/*"] do
   sh "statik -src embed/root -dest embed"
 end
 
-file "tmp/development/bin/foobarbuilder" => ["embed/statik/statik.go", *FileList["**/*.go"]] do |t|
-  sh "go build -o tmp/development/bin/foobarbuilder"
+file "tmp/development/bin/hannibal" => ["embed/statik/statik.go", *FileList["**/*.go"]] do |t|
+  sh "go build -o tmp/development/bin/hannibal"
 end
 
 file "tmp/development/.sql-installed" => "postgresql/setup.sql" do |t|
@@ -30,7 +30,7 @@ end
 
 namespace :build do
   desc "Build backend"
-  task backend: ["tmp/development/bin/foobarbuilder"]
+  task backend: ["tmp/development/bin/hannibal"]
 
   desc "Install SQL"
   task installsql: ["tmp/development/.sql-installed"]
@@ -39,9 +39,9 @@ end
 desc "Build backend and frontend"
 task build: ["build:backend"]
 
-desc "Run foobarbuilder"
+desc "Run hannibal"
 task run: ["build:installsql", "build:backend"] do
-  exec "tmp/development/bin/foobarbuilder serve"
+  exec "tmp/development/bin/hannibal serve"
 end
 
 desc "Watch for source changes and rebuild and rerun"

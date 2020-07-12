@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/foobarbuilder/current"
+	"github.com/jackc/hannibal/current"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgxutil"
 	"github.com/jackc/tern/migrate"
 
-	_ "github.com/jackc/foobarbuilder/embed/statik"
+	_ "github.com/jackc/hannibal/embed/statik"
 	"github.com/rakyll/statik/fs"
 )
 
-const FoobarbuilderSchema = "foobarbuilder"
+const HannibalSchema = "hannibal"
 
 func MaintainSystem(ctx context.Context, connConfig *pgx.ConnConfig) error {
 
@@ -23,19 +23,19 @@ func MaintainSystem(ctx context.Context, connConfig *pgx.ConnConfig) error {
 	}
 	defer conn.Close(ctx)
 
-	systemSchemaExists, err := pgxutil.SelectBool(ctx, conn, "select exists(select 1 from pg_catalog.pg_namespace where nspname = $1)", FoobarbuilderSchema)
+	systemSchemaExists, err := pgxutil.SelectBool(ctx, conn, "select exists(select 1 from pg_catalog.pg_namespace where nspname = $1)", HannibalSchema)
 	if err != nil {
 		return err
 	}
 
 	if systemSchemaExists {
-		current.Logger(ctx).Debug().Str("schema", FoobarbuilderSchema).Msg("schema already exists")
+		current.Logger(ctx).Debug().Str("schema", HannibalSchema).Msg("schema already exists")
 	} else {
-		_, err = conn.Exec(ctx, fmt.Sprintf("create schema %s", FoobarbuilderSchema))
+		_, err = conn.Exec(ctx, fmt.Sprintf("create schema %s", HannibalSchema))
 		if err != nil {
-			return fmt.Errorf("failed to create schema %s: %w", FoobarbuilderSchema, err)
+			return fmt.Errorf("failed to create schema %s: %w", HannibalSchema, err)
 		}
-		current.Logger(ctx).Info().Str("schema", FoobarbuilderSchema).Msg("created schema")
+		current.Logger(ctx).Info().Str("schema", HannibalSchema).Msg("created schema")
 	}
 
 	statikFS, err := fs.New()
@@ -43,7 +43,7 @@ func MaintainSystem(ctx context.Context, connConfig *pgx.ConnConfig) error {
 		return err
 	}
 
-	migrator, err := migrate.NewMigratorEx(ctx, conn, fmt.Sprintf("%s.schema_version", FoobarbuilderSchema), &migrate.MigratorOptions{MigratorFS: statikFS})
+	migrator, err := migrate.NewMigratorEx(ctx, conn, fmt.Sprintf("%s.schema_version", HannibalSchema), &migrate.MigratorOptions{MigratorFS: statikFS})
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func MaintainSystem(ctx context.Context, connConfig *pgx.ConnConfig) error {
 		current.Logger(ctx).Info().Int32("sequence", sequence).Str("name", name).Msg("beginning migration")
 	}
 	migrator.Data = map[string]interface{}{
-		"foobarbuilderSchema": FoobarbuilderSchema,
+		"hannibalSchema": HannibalSchema,
 	}
 	err = migrator.LoadMigrations("/system_migrations")
 	if err != nil {

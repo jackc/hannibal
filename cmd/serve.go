@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/jackc/foobarbuilder/server"
+	"github.com/jackc/hannibal/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

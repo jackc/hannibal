@@ -6,15 +6,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jackc/foobarbuilder/current"
-	"github.com/jackc/foobarbuilder/db"
-	"github.com/jackc/foobarbuilder/develop/fs"
+	"github.com/jackc/hannibal/current"
+	"github.com/jackc/hannibal/db"
+	"github.com/jackc/hannibal/develop/fs"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/tern/migrate"
 	"github.com/rs/zerolog"
 
-	_ "github.com/jackc/foobarbuilder/embed/statik"
+	_ "github.com/jackc/hannibal/embed/statik"
 	statikfs "github.com/rakyll/statik/fs"
 )
 

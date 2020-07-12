@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
-	"github.com/jackc/foobarbuilder/current"
-	"github.com/jackc/foobarbuilder/db"
+	"github.com/jackc/hannibal/current"
+	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgtype"
 	pgtypeuuid "github.com/jackc/pgtype/ext/gofrs-uuid"
 	shopspring "github.com/jackc/pgtype/ext/shopspring-numeric"
@@ -81,7 +81,7 @@ func Serve(config *Config) {
 	r.Use(middleware.Recoverer)
 
 	var handlers []Handler
-	err = pgxutil.SelectAllStruct(context.Background(), dbpool, &handlers, fmt.Sprintf("select * from %s.get_handlers()", db.FoobarbuilderSchema))
+	err = pgxutil.SelectAllStruct(context.Background(), dbpool, &handlers, fmt.Sprintf("select * from %s.get_handlers()", db.HannibalSchema))
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to read handlers")
 	}
@@ -178,7 +178,7 @@ func RegisterDataTypes(ctx context.Context, conn *pgx.Conn) error {
 	}
 
 	for _, typeName := range dataTypeNames {
-		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), fmt.Sprintf("%s.%s", db.FoobarbuilderSchema, typeName))
+		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), fmt.Sprintf("%s.%s", db.HannibalSchema, typeName))
 		if err != nil {
 			return err
 		}

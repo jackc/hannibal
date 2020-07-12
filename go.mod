@@ -1,4 +1,4 @@
-module github.com/jackc/foobarbuilder
+module github.com/jackc/hannibal
 
 go 1.14
 

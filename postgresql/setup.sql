@@ -1,8 +1,8 @@
-select foobarbuilder.create_handler(
+select hannibal.create_handler(
   'GET',
   '/hey',
   'select json_build_object(''time'', now(), ''name'', $1::text)',
   array[
-    foobarbuilder.build_handler_param('name', 'text', true)
+    hannibal.build_handler_param('name', 'text', true)
   ]
 );

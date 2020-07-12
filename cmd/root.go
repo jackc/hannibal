@@ -12,7 +12,7 @@ import (
 var cfgFile string
 
 var rootCmd = &cobra.Command{
-	Use:   "foobarbuilder",
+	Use:   "hannibal",
 	Short: "Rapid application development",
 }
 
@@ -47,9 +47,9 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Search config in home directory with name ".foobarbuilder" (without extension).
+		// Search config in home directory with name ".hannibal" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".foobarbuilder")
+		viper.SetConfigName(".hannibal")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
