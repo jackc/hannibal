@@ -98,7 +98,7 @@ func installSQL(sqlPath string, connConfig *pgx.ConnConfig) error {
 
 	appSetupName := "app_setup.sql"
 
-	cps.Schema = "app"
+	cps.Schema = "hannibal_app"
 	cps.Manifest = append([]string{appSetupName}, cps.Manifest...)
 	cps.SourceCode[appSetupName] = string(buf)
 

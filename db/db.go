@@ -13,7 +13,7 @@ import (
 	"github.com/rakyll/statik/fs"
 )
 
-const HannibalSchema = "hannibal"
+const HannibalSchema = "hannibal_system"
 
 func MaintainSystem(ctx context.Context, connConfig *pgx.ConnConfig) error {
 
