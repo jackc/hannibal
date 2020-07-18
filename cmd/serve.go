@@ -12,8 +12,10 @@ var serveCmd = &cobra.Command{
 	Short: "Start web server",
 	Run: func(cmd *cobra.Command, args []string) {
 		server.Serve(&server.Config{
-			ListenAddress: viper.GetString("http_service_address"),
-			DatabaseURL:   viper.GetString("database_url"),
+			ListenAddress:        viper.GetString("http_service_address"),
+			DatabaseURL:          viper.GetString("database_url"),
+			DatabaseSystemSchema: viper.GetString("database_system_schema"),
+			DatabaseAppSchema:    viper.GetString("database_app_schema"),
 		})
 	},
 }
@@ -26,4 +28,11 @@ func init() {
 
 	serveCmd.Flags().StringP("database-url", "d", "", "Database URL or DSN")
 	viper.BindPFlag("database_url", serveCmd.Flags().Lookup("database-url"))
+
+	serveCmd.Flags().String("database-system-schema", "hannibal_system", "Database schema for system code and data")
+	viper.BindPFlag("database_system_schema", serveCmd.Flags().Lookup("database-system-schema"))
+
+	serveCmd.Flags().String("database-app-schema", "hannibal_app", "Database schema for application code")
+	viper.BindPFlag("database_app_schema", serveCmd.Flags().Lookup("database-app-schema"))
+
 }

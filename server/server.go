@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgtype/pgxtype"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgxutil"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
@@ -25,8 +26,10 @@ import (
 var shutdownSignals = []os.Signal{os.Interrupt}
 
 type Config struct {
-	ListenAddress string
-	DatabaseURL   string
+	ListenAddress        string
+	DatabaseURL          string
+	DatabaseSystemSchema string
+	DatabaseAppSchema    string
 }
 
 func Serve(config *Config) {
@@ -39,7 +42,7 @@ func Serve(config *Config) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to parse database connection string")
 	}
-	dbconfig.AfterConnect = RegisterDataTypes
+	dbconfig.AfterConnect = afterConnect(config.DatabaseSystemSchema, config.DatabaseAppSchema)
 
 	dbpool, err := pgxpool.ConnectConfig(context.Background(), dbconfig)
 	if err != nil {
@@ -66,7 +69,7 @@ func Serve(config *Config) {
 
 	r.Use(middleware.Recoverer)
 
-	appHandler, err := NewAppHandler(dbpool)
+	appHandler, err := NewAppHandler(dbpool, config.DatabaseSystemSchema)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create app handler")
 	}
@@ -104,7 +107,29 @@ func Serve(config *Config) {
 
 }
 
-func RegisterDataTypes(ctx context.Context, conn *pgx.Conn) error {
+func afterConnect(systemSchema, appSchema string) func(context.Context, *pgx.Conn) error {
+	return func(ctx context.Context, conn *pgx.Conn) error {
+		searchPath, err := pgxutil.SelectString(ctx, conn, "show search_path")
+		if err != nil {
+			return fmt.Errorf("failed to get search_path: %v", err)
+		}
+
+		searchPath = fmt.Sprintf("%s, %s, %s", appSchema, searchPath, systemSchema)
+		_, err = conn.Exec(ctx, fmt.Sprintf("set search_path = %s", db.QuoteSchema(searchPath)))
+		if err != nil {
+			return fmt.Errorf("failed to set search_path: %v", err)
+		}
+
+		err = registerDataTypes(ctx, conn, systemSchema)
+		if err != nil {
+			return fmt.Errorf("failed to register data types: %v", err)
+		}
+
+		return nil
+	}
+}
+
+func registerDataTypes(ctx context.Context, conn *pgx.Conn, systemSchema string) error {
 	conn.ConnInfo().RegisterDataType(pgtype.DataType{
 		Value: &pgtypeuuid.UUID{},
 		Name:  "uuid",
@@ -128,7 +153,7 @@ func RegisterDataTypes(ctx context.Context, conn *pgx.Conn) error {
 	}
 
 	for _, typeName := range dataTypeNames {
-		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), fmt.Sprintf("%s.%s", db.HannibalSchema, typeName))
+		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), fmt.Sprintf("%s.%s", db.QuoteSchema(systemSchema), typeName))
 		if err != nil {
 			return err
 		}

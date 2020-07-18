@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/go-chi/chi"
-	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/pgxutil"
 )
@@ -17,11 +16,14 @@ type AppHandler struct {
 
 	dbpool *pgxpool.Pool
 	router chi.Router
+
+	databaseSystemSchema string
 }
 
-func NewAppHandler(dbpool *pgxpool.Pool) (*AppHandler, error) {
+func NewAppHandler(dbpool *pgxpool.Pool, databaseSystemSchema string) (*AppHandler, error) {
 	ah := &AppHandler{
-		dbpool: dbpool,
+		dbpool:               dbpool,
+		databaseSystemSchema: databaseSystemSchema,
 	}
 
 	return ah, nil
@@ -32,7 +34,7 @@ func (ah *AppHandler) Load() error {
 	defer ah.reloadMutex.Unlock()
 
 	var handlers []Handler
-	err := pgxutil.SelectAllStruct(context.Background(), ah.dbpool, &handlers, fmt.Sprintf("select * from %s.get_handlers()", db.HannibalSchema))
+	err := pgxutil.SelectAllStruct(context.Background(), ah.dbpool, &handlers, fmt.Sprintf("select * from %s.get_handlers()", ah.databaseSystemSchema))
 	if err != nil {
 		return fmt.Errorf("failed to read handlers: %v", err)
 	}

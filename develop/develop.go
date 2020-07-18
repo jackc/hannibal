@@ -19,9 +19,11 @@ import (
 )
 
 type Config struct {
-	ProjectPath   string
-	ListenAddress string
-	DatabaseURL   string
+	ProjectPath          string
+	ListenAddress        string
+	DatabaseURL          string
+	DatabaseSystemSchema string
+	DatabaseAppSchema    string
 }
 
 func Develop(config *Config) {
@@ -35,7 +37,7 @@ func Develop(config *Config) {
 		log.Fatal().Err(err).Msg("failed to parse database connection string")
 	}
 
-	err = db.MaintainSystem(context.Background(), dbconfig.ConnConfig)
+	err = db.MaintainSystem(context.Background(), dbconfig.ConnConfig, config.DatabaseSystemSchema)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to maintain system")
 	}
@@ -52,7 +54,7 @@ func Develop(config *Config) {
 	}
 
 	// install sql code on startup
-	err = installSQL(sqlPath, dbconfig.ConnConfig)
+	err = installSQL(sqlPath, dbconfig.ConnConfig, config.DatabaseAppSchema)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to install sql")
 	} else {
@@ -63,7 +65,7 @@ func Develop(config *Config) {
 		select {
 		case event := <-watcher.Events:
 			log.Info().Str("name", event.Name).Str("op", event.Op.String()).Msg("file change detected")
-			err := installSQL(sqlPath, dbconfig.ConnConfig)
+			err := installSQL(sqlPath, dbconfig.ConnConfig, config.DatabaseAppSchema)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to install sql")
 			} else {
@@ -75,7 +77,7 @@ func Develop(config *Config) {
 	}
 }
 
-func installSQL(sqlPath string, connConfig *pgx.ConnConfig) error {
+func installSQL(sqlPath string, connConfig *pgx.ConnConfig, appSchema string) error {
 	cps, err := migrate.LoadCodePackageSource(sqlPath)
 	if err != nil {
 		return err
@@ -98,7 +100,7 @@ func installSQL(sqlPath string, connConfig *pgx.ConnConfig) error {
 
 	appSetupName := "app_setup.sql"
 
-	cps.Schema = "hannibal_app"
+	cps.Schema = appSchema
 	cps.Manifest = append([]string{appSetupName}, cps.Manifest...)
 	cps.SourceCode[appSetupName] = string(buf)
 
