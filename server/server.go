@@ -18,7 +18,6 @@ import (
 	"github.com/jackc/pgtype/pgxtype"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/jackc/pgxutil"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
@@ -28,19 +27,6 @@ var shutdownSignals = []os.Signal{os.Interrupt}
 type Config struct {
 	ListenAddress string
 	DatabaseURL   string
-}
-
-type HandlerParam struct {
-	Name        string
-	ParamTypeID string
-	Required    bool
-}
-
-type Handler struct {
-	Method  string
-	Pattern string
-	SQL     string
-	Params  []HandlerParam
 }
 
 func Serve(config *Config) {
@@ -80,27 +66,17 @@ func Serve(config *Config) {
 
 	r.Use(middleware.Recoverer)
 
-	var handlers []Handler
-	err = pgxutil.SelectAllStruct(context.Background(), dbpool, &handlers, fmt.Sprintf("select * from %s.get_handlers()", db.HannibalSchema))
+	appHandler, err := NewAppHandler(dbpool)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to read handlers")
+		log.Fatal().Err(err).Msg("failed to create app handler")
 	}
 
-	for _, h := range handlers {
-		fmt.Println(h)
-		// TODO - params need to be parsed into something and used in PGJSONHandler.ServeHTTP
-		jh := &PGJSONHandler{
-			DB:     dbpool,
-			SQL:    h.SQL,
-			Params: make([]PGJSONHandlerParam, len(h.Params)),
-		}
-		for i := range h.Params {
-			jh.Params[i].Name = h.Params[i].Name
-		}
-
-		fmt.Println(jh)
-		r.Method(h.Method, h.Pattern, jh)
+	err = appHandler.Load()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load app handler")
 	}
+
+	r.Mount("/", appHandler)
 
 	server := &http.Server{
 		Addr:    config.ListenAddress,
@@ -126,32 +102,6 @@ func Serve(config *Config) {
 		log.Fatal().Err(err).Msg("could not start HTTP server")
 	}
 
-}
-
-type PGJSONHandlerParam struct {
-	Name string
-}
-
-type PGJSONHandler struct {
-	DB     *pgxpool.Pool
-	SQL    string
-	Params []PGJSONHandlerParam
-}
-
-func (h *PGJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	args := make([]interface{}, len(h.Params))
-	for i := range h.Params {
-		args[i] = r.URL.Query().Get(h.Params[i].Name)
-	}
-
-	buf, err := pgxutil.SelectByteSlice(r.Context(), h.DB, h.SQL, args...)
-	if err != nil {
-		panic(err)
-	}
-
-	w.Header().Add("Content-Type", "application/json")
-
-	w.Write(buf)
 }
 
 func RegisterDataTypes(ctx context.Context, conn *pgx.Conn) error {
