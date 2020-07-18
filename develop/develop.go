@@ -3,12 +3,14 @@ package develop
 import (
 	"context"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/develop/fs"
+	"github.com/jackc/hannibal/server"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/tern/migrate"
@@ -61,6 +63,45 @@ func Develop(config *Config) {
 		log.Info().Msg("updated sql")
 	}
 
+	// HTTP Server
+	dbconfig, err = pgxpool.ParseConfig(config.DatabaseURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to parse database connection string")
+	}
+	dbconfig.AfterConnect = server.AfterConnect(config.DatabaseSystemSchema, config.DatabaseAppSchema)
+
+	dbpool, err := pgxpool.ConnectConfig(context.Background(), dbconfig)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to connect to database")
+	}
+
+	r := server.BaseMux(log)
+
+	appHandler, err := server.NewAppHandler(dbpool, config.DatabaseSystemSchema)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create app handler")
+	}
+
+	err = appHandler.Load()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load app handler")
+	}
+
+	r.Mount("/", appHandler)
+
+	server := &http.Server{
+		Addr:    config.ListenAddress,
+		Handler: r,
+	}
+
+	go func() {
+		err = server.ListenAndServe()
+		if err != http.ErrServerClosed {
+			log.Fatal().Err(err).Msg("could not start HTTP server")
+		}
+	}()
+	// End HTTP Server
+
 	for {
 		select {
 		case event := <-watcher.Events:
@@ -70,6 +111,13 @@ func Develop(config *Config) {
 				log.Error().Err(err).Msg("failed to install sql")
 			} else {
 				log.Info().Msg("updated sql")
+			}
+
+			err = appHandler.Load()
+			if err != nil {
+				log.Error().Err(err).Msg("failed to reload app handler")
+			} else {
+				log.Info().Msg("reloaded app handler")
 			}
 		case err := <-watcher.Errors:
 			log.Fatal().Err(err).Msg("file system watcher error")

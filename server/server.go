@@ -8,8 +8,6 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgtype"
@@ -20,7 +18,6 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/pgxutil"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/hlog"
 )
 
 var shutdownSignals = []os.Signal{os.Interrupt}
@@ -42,32 +39,14 @@ func Serve(config *Config) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to parse database connection string")
 	}
-	dbconfig.AfterConnect = afterConnect(config.DatabaseSystemSchema, config.DatabaseAppSchema)
+	dbconfig.AfterConnect = AfterConnect(config.DatabaseSystemSchema, config.DatabaseAppSchema)
 
 	dbpool, err := pgxpool.ConnectConfig(context.Background(), dbconfig)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to connect to database")
 	}
 
-	r := chi.NewRouter()
-
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-
-	r.Use(hlog.NewHandler(log))
-	r.Use(hlog.RequestIDHandler("request_id", "x-request-id"))
-	r.Use(hlog.MethodHandler("method"))
-	r.Use(hlog.URLHandler("url"))
-	r.Use(hlog.RemoteAddrHandler("remote_ip"))
-	r.Use(hlog.AccessHandler(func(r *http.Request, status, size int, duration time.Duration) {
-		hlog.FromRequest(r).Info().
-			Int("status", status).
-			Int("size", size).
-			Dur("duration", duration).
-			Msg("HTTP request")
-	}))
-
-	r.Use(middleware.Recoverer)
+	r := BaseMux(log)
 
 	appHandler, err := NewAppHandler(dbpool, config.DatabaseSystemSchema)
 	if err != nil {
@@ -107,7 +86,7 @@ func Serve(config *Config) {
 
 }
 
-func afterConnect(systemSchema, appSchema string) func(context.Context, *pgx.Conn) error {
+func AfterConnect(systemSchema, appSchema string) func(context.Context, *pgx.Conn) error {
 	return func(ctx context.Context, conn *pgx.Conn) error {
 		searchPath, err := pgxutil.SelectString(ctx, conn, "show search_path")
 		if err != nil {
