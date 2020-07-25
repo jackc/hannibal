@@ -12,7 +12,7 @@ import (
 )
 
 func CreateAPIKey(ctx context.Context, userID int32) (int32, string, error) {
-	apiKey := make([]byte, 0, 24)
+	apiKey := make([]byte, 24)
 	_, err := io.ReadFull(rand.Reader, apiKey)
 	if err != nil {
 		return 0, "", err
@@ -23,7 +23,7 @@ func CreateAPIKey(ctx context.Context, userID int32) (int32, string, error) {
 	var id int32
 	err = db.Sys(ctx).QueryRow(
 		ctx,
-		fmt.Sprintf("insert into %s.api_keys (user_id, digest) values ($1, $2) returning id", db.GetConfig(ctx).SysSchema),
+		fmt.Sprintf("insert into %s.api_keys (user_id, digest, creation_time) values ($1, $2, now()) returning id", db.GetConfig(ctx).SysSchema),
 		userID, digest,
 	).Scan(&id)
 	if err != nil {

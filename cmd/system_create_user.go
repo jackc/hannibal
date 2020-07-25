@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/system"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // systemCreateUserCmd represents the system create-user command
@@ -23,10 +22,7 @@ var systemCreateUserCmd = &cobra.Command{
 			logger.Fatal().Err(err).Msg("failed to connect to database")
 		}
 
-		username := viper.GetString("username")
-		if username == "" {
-			logger.Fatal().Msg("username is required")
-		}
+		username, _ := cmd.Flags().GetString("username")
 		id, err := system.CreateUser(ctx, username)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("failed to create user")
@@ -40,5 +36,5 @@ func init() {
 	systemCmd.AddCommand(systemCreateUserCmd)
 
 	systemCreateUserCmd.Flags().StringP("username", "u", "", "Username")
-	viper.BindPFlag("username", systemCreateUserCmd.Flags().Lookup("username"))
+	systemCreateUserCmd.MarkFlagRequired("username")
 }
