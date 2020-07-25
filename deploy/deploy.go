@@ -35,7 +35,6 @@ func BuildPackage(w io.Writer, pkgPath string) (int64, []byte, error) {
 			return nil
 		}
 		pkgRelPath = pkgRelPath[1:] // remove "/"
-		fmt.Println(pkgRelPath)
 
 		th := &tar.Header{
 			Name: pkgRelPath,
