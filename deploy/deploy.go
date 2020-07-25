@@ -3,7 +3,7 @@ package deploy
 import (
 	"archive/tar"
 	"compress/gzip"
-	"crypto/sha256"
+	"crypto/sha512"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +18,7 @@ func (lw *lenWriter) Write(p []byte) (int, error) {
 }
 
 func BuildPackage(w io.Writer, pkgPath string) (int64, []byte, error) {
-	hash := sha256.New()
+	hash := sha512.New512_256()
 	lenWriter := new(lenWriter)
 	multiWriter := io.MultiWriter(w, hash, lenWriter)
 
