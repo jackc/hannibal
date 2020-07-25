@@ -25,10 +25,7 @@ type Config struct {
 func Develop(config *Config) {
 	log := *current.Logger(context.Background())
 
-	err := db.MaintainSystem(context.Background())
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to maintain system")
-	}
+	db.RequireCorrectVersion(context.Background())
 
 	watcher, err := fs.NewWatcher()
 	if err != nil {

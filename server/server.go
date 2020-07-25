@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/hannibal/current"
+	"github.com/jackc/hannibal/db"
 )
 
 var shutdownSignals = []os.Signal{os.Interrupt}
@@ -20,6 +21,8 @@ type Config struct {
 }
 
 func Serve(config *Config) {
+	db.RequireCorrectVersion(context.Background())
+
 	log := *current.Logger(context.Background())
 
 	r := BaseMux(log)
