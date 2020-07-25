@@ -7,34 +7,30 @@ import (
 	"sync"
 
 	"github.com/go-chi/chi"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgxutil"
 )
 
 type AppHandler struct {
 	reloadMutex sync.RWMutex
 
-	dbpool *pgxpool.Pool
 	router chi.Router
-
-	databaseSystemSchema string
 }
 
-func NewAppHandler(dbpool *pgxpool.Pool, databaseSystemSchema string) (*AppHandler, error) {
-	ah := &AppHandler{
-		dbpool:               dbpool,
-		databaseSystemSchema: databaseSystemSchema,
-	}
+func NewAppHandler(ctx context.Context) (*AppHandler, error) {
+	ah := &AppHandler{}
 
 	return ah, nil
 }
 
-func (ah *AppHandler) Load() error {
+func (ah *AppHandler) Load(ctx context.Context) error {
 	ah.reloadMutex.Lock()
 	defer ah.reloadMutex.Unlock()
 
 	var handlers []Handler
-	err := pgxutil.SelectAllStruct(context.Background(), ah.dbpool, &handlers, fmt.Sprintf("select * from %s.get_handlers()", ah.databaseSystemSchema))
+	err := pgxutil.SelectAllStruct(context.Background(), db.Sys(ctx), &handlers,
+		fmt.Sprintf("select * from %s.get_handlers()", db.QuoteSchema(db.GetConfig(ctx).SysSchema)),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to read handlers: %v", err)
 	}
@@ -44,7 +40,6 @@ func (ah *AppHandler) Load() error {
 		fmt.Println(h)
 		// TODO - params need to be parsed into something and used in PGJSONHandler.ServeHTTP
 		jh := &PGJSONHandler{
-			DB:     ah.dbpool,
 			SQL:    h.SQL,
 			Params: make([]PGJSONHandlerParam, len(h.Params)),
 		}
@@ -85,18 +80,19 @@ type PGJSONHandlerParam struct {
 }
 
 type PGJSONHandler struct {
-	DB     *pgxpool.Pool
 	SQL    string
 	Params []PGJSONHandlerParam
 }
 
 func (h *PGJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	args := make([]interface{}, len(h.Params))
 	for i := range h.Params {
 		args[i] = r.URL.Query().Get(h.Params[i].Name)
 	}
 
-	buf, err := pgxutil.SelectByteSlice(r.Context(), h.DB, h.SQL, args...)
+	buf, err := pgxutil.SelectByteSlice(ctx, db.App(ctx), h.SQL, args...)
 	if err != nil {
 		panic(err)
 	}

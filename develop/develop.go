@@ -4,7 +4,6 @@ import (
 	"context"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"path/filepath"
 
 	"github.com/jackc/hannibal/current"
@@ -12,34 +11,21 @@ import (
 	"github.com/jackc/hannibal/develop/fs"
 	"github.com/jackc/hannibal/server"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/tern/migrate"
-	"github.com/rs/zerolog"
 
 	_ "github.com/jackc/hannibal/embed/statik"
 	statikfs "github.com/rakyll/statik/fs"
 )
 
 type Config struct {
-	ProjectPath          string
-	ListenAddress        string
-	DatabaseURL          string
-	DatabaseSystemSchema string
-	DatabaseAppSchema    string
+	ProjectPath   string
+	ListenAddress string
 }
 
 func Develop(config *Config) {
-	log := zerolog.New(os.Stdout).With().
-		Timestamp().
-		Logger()
-	current.SetLogger(&log)
+	log := *current.Logger(context.Background())
 
-	dbconfig, err := pgxpool.ParseConfig(config.DatabaseURL)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to parse database connection string")
-	}
-
-	err = db.MaintainSystem(context.Background(), dbconfig.ConnConfig, config.DatabaseSystemSchema)
+	err := db.MaintainSystem(context.Background())
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to maintain system")
 	}
@@ -56,7 +42,7 @@ func Develop(config *Config) {
 	}
 
 	// install sql code on startup
-	err = installSQL(sqlPath, dbconfig.ConnConfig, config.DatabaseAppSchema)
+	err = installSQL(context.Background(), sqlPath)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to install sql")
 	} else {
@@ -64,25 +50,14 @@ func Develop(config *Config) {
 	}
 
 	// HTTP Server
-	dbconfig, err = pgxpool.ParseConfig(config.DatabaseURL)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to parse database connection string")
-	}
-	dbconfig.AfterConnect = server.AfterConnect(config.DatabaseSystemSchema, config.DatabaseAppSchema)
-
-	dbpool, err := pgxpool.ConnectConfig(context.Background(), dbconfig)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to connect to database")
-	}
-
 	r := server.BaseMux(log)
 
-	appHandler, err := server.NewAppHandler(dbpool, config.DatabaseSystemSchema)
+	appHandler, err := server.NewAppHandler(context.Background())
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create app handler")
 	}
 
-	err = appHandler.Load()
+	err = appHandler.Load(context.Background())
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to load app handler")
 	}
@@ -106,14 +81,14 @@ func Develop(config *Config) {
 		select {
 		case event := <-watcher.Events:
 			log.Info().Str("name", event.Name).Str("op", event.Op.String()).Msg("file change detected")
-			err := installSQL(sqlPath, dbconfig.ConnConfig, config.DatabaseAppSchema)
+			err := installSQL(context.Background(), sqlPath)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to install sql")
 			} else {
 				log.Info().Msg("updated sql")
 			}
 
-			err = appHandler.Load()
+			err = appHandler.Load(context.Background())
 			if err != nil {
 				log.Error().Err(err).Msg("failed to reload app handler")
 			} else {
@@ -125,7 +100,7 @@ func Develop(config *Config) {
 	}
 }
 
-func installSQL(sqlPath string, connConfig *pgx.ConnConfig, appSchema string) error {
+func installSQL(ctx context.Context, sqlPath string) error {
 	cps, err := migrate.LoadCodePackageSource(sqlPath)
 	if err != nil {
 		return err
@@ -148,11 +123,13 @@ func installSQL(sqlPath string, connConfig *pgx.ConnConfig, appSchema string) er
 
 	appSetupName := "app_setup.sql"
 
-	cps.Schema = appSchema
+	dbconfig := db.GetConfig(ctx)
+
+	cps.Schema = dbconfig.AppSchema
 	cps.Manifest = append([]string{appSetupName}, cps.Manifest...)
 	cps.SourceCode[appSetupName] = string(buf)
 
-	conn, err := pgx.ConnectConfig(context.Background(), connConfig)
+	conn, err := pgx.Connect(ctx, dbconfig.SysConnString)
 	if err != nil {
 		return err
 	}
@@ -162,7 +139,7 @@ func installSQL(sqlPath string, connConfig *pgx.ConnConfig, appSchema string) er
 		return err
 	}
 
-	err = codePackage.Install(context.Background(), conn, map[string]interface{}{})
+	err = codePackage.Install(ctx, conn, map[string]interface{}{})
 	if err != nil {
 		return err
 	}

@@ -2,72 +2,238 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"github.com/jackc/hannibal/current"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgtype"
+	pgtypeuuid "github.com/jackc/pgtype/ext/gofrs-uuid"
+	shopspring "github.com/jackc/pgtype/ext/shopspring-numeric"
+	"github.com/jackc/pgtype/pgxtype"
 	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/pgxutil"
-	"github.com/jackc/tern/migrate"
-
-	_ "github.com/jackc/hannibal/embed/statik"
-	"github.com/rakyll/statik/fs"
 )
 
-func MaintainSystem(ctx context.Context, connConfig *pgx.ConnConfig, systemSchema string) error {
-	conn, err := pgx.ConnectConfig(ctx, connConfig)
-	if err != nil {
-		return err
-	}
-	defer conn.Close(ctx)
+type ctxKey int
 
-	_, err = conn.Exec(ctx, fmt.Sprintf("set search_path = %s", QuoteSchema(systemSchema)))
-	if err != nil {
-		return fmt.Errorf("failed to set search_path: %v", err)
+const (
+	_ ctxKey = iota
+	configCtxKey
+	appDBCtxKey
+	sysDBCtxKey
+	logDBCtxKey
+)
+
+var config *Config
+var appDB *pgxpool.Pool
+var sysDB *pgxpool.Pool
+var logDB *pgxpool.Pool
+
+type Config struct {
+	AppConnString string
+	AppSchema     string
+
+	SysConnString string
+	SysSchema     string
+
+	LogConnString string
+	LogSchema     string
+}
+
+func (c *Config) SetDerivedDefaults() {
+	if c.SysConnString == "" {
+		c.SysConnString = c.AppConnString
 	}
 
-	systemSchemaExists, err := pgxutil.SelectBool(ctx, conn, "select exists(select 1 from pg_catalog.pg_namespace where nspname = $1)", systemSchema)
-	if err != nil {
-		return err
+	if c.LogConnString == "" {
+		c.LogConnString = c.AppConnString
+	}
+}
+
+func Connect(ctx context.Context, c *Config) error {
+	if config != nil || appDB != nil || sysDB != nil || logDB != nil {
+		return errors.New("database already connected")
 	}
 
-	if systemSchemaExists {
-		current.Logger(ctx).Debug().Str("schema", systemSchema).Msg("schema already exists")
-	} else {
-		_, err = conn.Exec(ctx, fmt.Sprintf("create schema %s", systemSchema))
+	config = c
+
+	connect := func(connString string) (*pgxpool.Pool, error) {
+		dbconfig, err := pgxpool.ParseConfig(connString)
 		if err != nil {
-			return fmt.Errorf("failed to create schema %s: %w", systemSchema, err)
+			return nil, fmt.Errorf("failed to parse database connection string: %v", err)
 		}
-		current.Logger(ctx).Info().Str("schema", systemSchema).Msg("created schema")
+		dbconfig.AfterConnect = afterConnect(config)
+
+		dbpool, err := pgxpool.ConnectConfig(ctx, dbconfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to database: %v", err)
+		}
+
+		return dbpool, nil
 	}
 
-	statikFS, err := fs.New()
+	db, err := connect(config.AppConnString)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to connect to app db: %v", err)
+	}
+	appDB = db
+
+	if config.SysConnString == config.AppConnString {
+		sysDB = appDB
+	} else {
+		db, err := connect(config.SysConnString)
+		if err != nil {
+			return fmt.Errorf("failed to connect to sys db: %v", err)
+		}
+		sysDB = db
 	}
 
-	migrator, err := migrate.NewMigratorEx(ctx, conn, fmt.Sprintf("%s.schema_version", systemSchema), &migrate.MigratorOptions{MigratorFS: statikFS})
-	if err != nil {
-		return err
-	}
-	migrator.OnStart = func(ctx context.Context, sequence int32, name string, sql string) {
-		current.Logger(ctx).Info().Int32("sequence", sequence).Str("name", name).Msg("beginning migration")
-	}
-	migrator.Data = map[string]interface{}{
-		"hannibalSchema": systemSchema,
-	}
-	err = migrator.LoadMigrations("/system_migrations")
-	if err != nil {
-		return err
-	}
-
-	err = migrator.Migrate(ctx)
-	if err != nil {
-		return err
+	if config.LogConnString == config.LogConnString {
+		logDB = appDB
+	} else {
+		db, err := connect(config.LogConnString)
+		if err != nil {
+			return fmt.Errorf("failed to connect to log db: %v", err)
+		}
+		logDB = db
 	}
 
 	return nil
 }
 
-func QuoteSchema(s string) string {
-	return pgx.Identifier{s}.Sanitize()
+func afterConnect(config *Config) func(context.Context, *pgx.Conn) error {
+	return func(ctx context.Context, conn *pgx.Conn) error {
+		searchPath, err := pgxutil.SelectString(ctx, conn, "show search_path")
+		if err != nil {
+			return fmt.Errorf("failed to get search_path: %v", err)
+		}
+
+		searchPath = fmt.Sprintf("%s, %s, %s", QuoteSchema(config.AppSchema), searchPath, QuoteSchema(config.SysSchema))
+		_, err = conn.Exec(ctx, fmt.Sprintf("set search_path = %s", searchPath))
+		if err != nil {
+			return fmt.Errorf("failed to set search_path: %v", err)
+		}
+
+		err = registerDataTypes(ctx, conn, config.SysSchema)
+		if err != nil {
+			return fmt.Errorf("failed to register data types: %v", err)
+		}
+
+		return nil
+	}
+}
+
+func registerDataTypes(ctx context.Context, conn *pgx.Conn, systemSchema string) error {
+	conn.ConnInfo().RegisterDataType(pgtype.DataType{
+		Value: &pgtypeuuid.UUID{},
+		Name:  "uuid",
+		OID:   pgtype.UUIDOID,
+	})
+	conn.ConnInfo().RegisterDataType(pgtype.DataType{
+		Value: &shopspring.Numeric{},
+		Name:  "numeric",
+		OID:   pgtype.NumericOID,
+	})
+
+	// TODO - figure out better way to handle custom types that will not exist on initial load. Or maybe remove custom
+	// types altogether. Currently, the server needs to be restarted after the initial load.
+
+	dataTypeNames := []string{
+		"handler_param",
+		"_handler_param",
+		"handler",
+		"_handler",
+		"get_handler_result_row_param",
+		"_get_handler_result_row_param",
+		"get_handler_result_row",
+		"_get_handler_result_row",
+	}
+
+	for _, typeName := range dataTypeNames {
+		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), fmt.Sprintf("%s.%s", QuoteSchema(systemSchema), typeName))
+		// if err != nil {
+		// 	return err
+		// }
+		if err == nil {
+			conn.ConnInfo().RegisterDataType(dataType)
+		}
+	}
+
+	return nil
+}
+
+func GetConfig(ctx context.Context) *Config {
+	v := ctx.Value(configCtxKey)
+	if v != nil {
+		return v.(*Config)
+	}
+
+	if config == nil {
+		panic("missing config in ctx and config not set")
+	}
+
+	return config
+}
+
+func WithConfig(ctx context.Context, c *Config) context.Context {
+	return context.WithValue(ctx, configCtxKey, c)
+}
+
+type DBConn interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, optionsAndArgs ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
+}
+
+func App(ctx context.Context) DBConn {
+	v := ctx.Value(appDBCtxKey)
+	if v != nil {
+		return v.(DBConn)
+	}
+
+	if appDB == nil {
+		panic("missing appDB in ctx and appDB not set")
+	}
+
+	return appDB
+}
+
+func WithApp(ctx context.Context, dbconn DBConn) context.Context {
+	return context.WithValue(ctx, appDBCtxKey, dbconn)
+}
+
+func Sys(ctx context.Context) DBConn {
+	v := ctx.Value(sysDBCtxKey)
+	if v != nil {
+		return v.(DBConn)
+	}
+
+	if sysDB == nil {
+		panic("missing sysDB in ctx and sysDB not set")
+	}
+
+	return sysDB
+}
+
+func WithSys(ctx context.Context, dbconn DBConn) context.Context {
+	return context.WithValue(ctx, sysDBCtxKey, dbconn)
+}
+
+func Log(ctx context.Context) DBConn {
+	v := ctx.Value(logDBCtxKey)
+	if v != nil {
+		return v.(DBConn)
+	}
+
+	if logDB == nil {
+		panic("missing logDB in ctx and logDB not set")
+	}
+
+	return logDB
+}
+
+func WithLog(ctx context.Context, dbconn DBConn) context.Context {
+	return context.WithValue(ctx, logDBCtxKey, dbconn)
 }

@@ -32,6 +32,24 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yak.yaml)")
+
+	rootCmd.PersistentFlags().StringP("database-dsn", "d", "", "Primary database URL or DSN")
+	viper.BindPFlag("database_dsn", rootCmd.PersistentFlags().Lookup("database-dsn"))
+
+	rootCmd.PersistentFlags().String("database-app-schema", "hannibal_app", "Database schema for application code")
+	viper.BindPFlag("database_app_schema", rootCmd.PersistentFlags().Lookup("database-app-schema"))
+
+	rootCmd.PersistentFlags().String("database-system-dsn", "", "System database URL or DSN (uses database-dsn when empty)")
+	viper.BindPFlag("database_system_dsn", rootCmd.PersistentFlags().Lookup("database-system-dsn"))
+
+	rootCmd.PersistentFlags().String("database-system-schema", "hannibal_system", "Database schema for system code and data")
+	viper.BindPFlag("database_system_schema", rootCmd.PersistentFlags().Lookup("database-system-schema"))
+
+	rootCmd.PersistentFlags().String("database-log-dsn", "", "Log database URL or DSN (uses database-dsn when empty)")
+	viper.BindPFlag("database_log_dsn", rootCmd.PersistentFlags().Lookup("database-log-dsn"))
+
+	rootCmd.PersistentFlags().String("database-log-schema", "hannibal_log", "Database schema for logs")
+	viper.BindPFlag("database_log_schema", rootCmd.PersistentFlags().Lookup("database-log-schema"))
 }
 
 // initConfig reads in config file and ENV variables if set.
