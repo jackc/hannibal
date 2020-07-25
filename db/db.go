@@ -51,52 +51,85 @@ func (c *Config) SetDerivedDefaults() {
 	}
 }
 
-func Connect(ctx context.Context, c *Config) error {
-	if config != nil || appDB != nil || sysDB != nil || logDB != nil {
-		return errors.New("database already connected")
+func connect(ctx context.Context, connString string) (*pgxpool.Pool, error) {
+	dbconfig, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse database connection string: %v", err)
+	}
+	dbconfig.AfterConnect = afterConnect(config)
+
+	dbpool, err := pgxpool.ConnectConfig(ctx, dbconfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
 
-	config = c
+	return dbpool, nil
+}
 
-	connect := func(connString string) (*pgxpool.Pool, error) {
-		dbconfig, err := pgxpool.ParseConfig(connString)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse database connection string: %v", err)
-		}
-		dbconfig.AfterConnect = afterConnect(config)
-
-		dbpool, err := pgxpool.ConnectConfig(ctx, dbconfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to database: %v", err)
-		}
-
-		return dbpool, nil
+func ConnectApp(ctx context.Context) error {
+	if appDB != nil {
+		return errors.New("app db already connected")
 	}
 
-	db, err := connect(config.AppConnString)
+	db, err := connect(ctx, config.AppConnString)
 	if err != nil {
 		return fmt.Errorf("failed to connect to app db: %v", err)
 	}
 	appDB = db
 
+	return nil
+}
+
+func ConnectSys(ctx context.Context) error {
+	if sysDB != nil {
+		return errors.New("sys db already connected")
+	}
+
 	if config.SysConnString == config.AppConnString {
 		sysDB = appDB
 	} else {
-		db, err := connect(config.SysConnString)
+		db, err := connect(ctx, config.SysConnString)
 		if err != nil {
 			return fmt.Errorf("failed to connect to sys db: %v", err)
 		}
 		sysDB = db
 	}
 
+	return nil
+}
+
+func ConnectLog(ctx context.Context) error {
+	if logDB != nil {
+		return errors.New("log db already connected")
+	}
+
 	if config.LogConnString == config.LogConnString {
 		logDB = appDB
 	} else {
-		db, err := connect(config.LogConnString)
+		db, err := connect(ctx, config.LogConnString)
 		if err != nil {
 			return fmt.Errorf("failed to connect to log db: %v", err)
 		}
 		logDB = db
+	}
+
+	return nil
+}
+
+func ConnectAll(ctx context.Context) error {
+	err := ConnectApp(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = ConnectSys(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = ConnectLog(ctx)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -161,6 +194,16 @@ func registerDataTypes(ctx context.Context, conn *pgx.Conn, systemSchema string)
 	}
 
 	return nil
+}
+
+func SetConfig(c *Config) {
+	if config != nil {
+		panic("cannot call SetConfig twice")
+	}
+	if c == nil {
+		panic("c must not be nil")
+	}
+	config = c
 }
 
 func GetConfig(ctx context.Context) *Config {

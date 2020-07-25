@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/jackc/hannibal/current"
+	"github.com/jackc/hannibal/db"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -22,6 +23,19 @@ var rootCmd = &cobra.Command{
 			Timestamp().
 			Logger()
 		current.SetLogger(&log)
+
+		dbConfig := &db.Config{
+			AppConnString: viper.GetString("database_dsn"),
+			AppSchema:     viper.GetString("database_app_schema"),
+
+			SysConnString: viper.GetString("database_system_dsn"),
+			SysSchema:     viper.GetString("database_system_schema"),
+
+			LogConnString: viper.GetString("database_log_dsn"),
+			LogSchema:     viper.GetString("database_log_schema"),
+		}
+		dbConfig.SetDerivedDefaults()
+		db.SetConfig(dbConfig)
 	},
 }
 
