@@ -85,7 +85,7 @@ func ConnectSys(ctx context.Context) error {
 		return errors.New("sys db already connected")
 	}
 
-	if config.SysConnString == config.AppConnString {
+	if config.SysConnString == config.AppConnString && appDB != nil {
 		sysDB = appDB
 	} else {
 		db, err := connect(ctx, config.SysConnString)
@@ -103,7 +103,7 @@ func ConnectLog(ctx context.Context) error {
 		return errors.New("log db already connected")
 	}
 
-	if config.LogConnString == config.LogConnString {
+	if config.LogConnString == config.LogConnString && appDB != nil {
 		logDB = appDB
 	} else {
 		db, err := connect(ctx, config.LogConnString)
