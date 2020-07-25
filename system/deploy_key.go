@@ -19,12 +19,12 @@ func CreateDeployKey(ctx context.Context, userID int32) (int32, string, error) {
 	var id int32
 	err = db.Sys(ctx).QueryRow(
 		ctx,
-		fmt.Sprintf("insert into %s.deploy_keys (user_id, public_key) values ($1, $2) returning id", db.GetConfig(ctx).SysSchema),
+		fmt.Sprintf("insert into %s.deploy_keys (user_id, public_key, creation_time) values ($1, $2, now()) returning id", db.GetConfig(ctx).SysSchema),
 		userID, []byte(pubKey),
 	).Scan(&id)
 	if err != nil {
 		return 0, "", err
 	}
 
-	return id, hex.EncodeToString([]byte(privKey)), nil
+	return id, hex.EncodeToString(privKey.Seed()), nil
 }
