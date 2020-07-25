@@ -2,12 +2,10 @@ package cmd
 
 import (
 	"context"
-	"os"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/server"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -17,10 +15,7 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start web server",
 	Run: func(cmd *cobra.Command, args []string) {
-		log := zerolog.New(os.Stdout).With().
-			Timestamp().
-			Logger()
-		current.SetLogger(&log)
+		logger := current.Logger(context.Background())
 
 		dbConfig := &db.Config{
 			AppConnString: viper.GetString("database_dsn"),
@@ -36,7 +31,7 @@ var serveCmd = &cobra.Command{
 
 		err := db.Connect(context.Background(), dbConfig)
 		if err != nil {
-			log.Fatal().Err(err).Msg("failed to connect to database")
+			logger.Fatal().Err(err).Msg("failed to connect to database")
 		}
 
 		server.Serve(&server.Config{

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jackc/hannibal/current"
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -14,6 +16,13 @@ var cfgFile string
 var rootCmd = &cobra.Command{
 	Use:   "hannibal",
 	Short: "Rapid application development",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		output := zerolog.ConsoleWriter{Out: os.Stdout}
+		log := zerolog.New(output).With().
+			Timestamp().
+			Logger()
+		current.SetLogger(&log)
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

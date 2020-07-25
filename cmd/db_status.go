@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"context"
-	"os"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -16,11 +14,7 @@ var dbStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "display database status",
 	Run: func(cmd *cobra.Command, args []string) {
-		output := zerolog.ConsoleWriter{Out: os.Stdout}
-		log := zerolog.New(output).With().
-			Timestamp().
-			Logger()
-		current.SetLogger(&log)
+		logger := current.Logger(context.Background())
 
 		dbConfig := &db.Config{
 			AppConnString: viper.GetString("database_dsn"),
@@ -36,20 +30,20 @@ var dbStatusCmd = &cobra.Command{
 
 		err := db.Connect(context.Background(), dbConfig)
 		if err != nil {
-			log.Fatal().Err(err).Msg("failed to connect to database")
+			logger.Fatal().Err(err).Msg("failed to connect to database")
 		}
 
 		dbStatus, err := db.GetDBStatus(context.Background())
 		if err != nil {
-			log.Fatal().Err(err).Msg("failed to get database status")
+			logger.Fatal().Err(err).Msg("failed to get database status")
 		}
 
 		if dbStatus.CurrentVersion < dbStatus.DesiredVersion {
-			log.Warn().Int32("currentVersion", dbStatus.CurrentVersion).Int32("desiredVersion", dbStatus.DesiredVersion).Msg("database needs to be upgraded")
+			logger.Warn().Int32("currentVersion", dbStatus.CurrentVersion).Int32("desiredVersion", dbStatus.DesiredVersion).Msg("database needs to be upgraded")
 		} else if dbStatus.CurrentVersion > dbStatus.DesiredVersion {
-			log.Warn().Int32("currentVersion", dbStatus.CurrentVersion).Int32("desiredVersion", dbStatus.DesiredVersion).Msg("database has later version than hannibal")
+			logger.Warn().Int32("currentVersion", dbStatus.CurrentVersion).Int32("desiredVersion", dbStatus.DesiredVersion).Msg("database has later version than hannibal")
 		} else {
-			log.Info().Int32("version", dbStatus.CurrentVersion).Msg("database is at the correct version")
+			logger.Info().Int32("version", dbStatus.CurrentVersion).Msg("database is at the correct version")
 		}
 	},
 }
