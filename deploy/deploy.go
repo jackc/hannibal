@@ -3,27 +3,25 @@ package deploy
 import (
 	"archive/tar"
 	"compress/gzip"
-	"crypto/sha512"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 )
 
-type lenWriter int64
-
-func (lw *lenWriter) Write(p []byte) (int, error) {
-	*lw += lenWriter(len(p))
-	return len(p), nil
+type PackageFile struct {
+	Path string
+	Mode os.FileMode
+	Size int64
 }
 
-func BuildPackage(w io.Writer, pkgPath string) (int64, []byte, error) {
-	hash := sha512.New512_256()
-	lenWriter := new(lenWriter)
-	multiWriter := io.MultiWriter(w, hash, lenWriter)
+type Package struct {
+	Path  string
+	Files []PackageFile
+}
 
-	gw := gzip.NewWriter(multiWriter)
-	tw := tar.NewWriter(gw)
+func NewPackage(pkgPath string) (*Package, error) {
+	pkg := &Package{Path: pkgPath}
 
 	walkFunc := func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -36,45 +34,78 @@ func BuildPackage(w io.Writer, pkgPath string) (int64, []byte, error) {
 		}
 		pkgRelPath = pkgRelPath[1:] // remove "/"
 
-		th := &tar.Header{
-			Name: pkgRelPath,
-			Mode: int64(info.Mode()),
+		pkg.Files = append(pkg.Files, PackageFile{
+			Path: pkgRelPath,
+			Mode: info.Mode(),
 			Size: info.Size(),
-		}
-
-		err := tw.WriteHeader(th)
-		if err != nil {
-			return fmt.Errorf("failed to write tar header for %s: %v", path, err)
-		}
-
-		file, err := os.Open(path)
-		if err != nil {
-			return fmt.Errorf("failed to open %s: %v", path, err)
-		}
-		defer file.Close()
-
-		_, err = io.Copy(tw, file)
-		if err != nil {
-			return fmt.Errorf("failed to copy to tar %s: %v", path, err)
-		}
+		})
 
 		return nil
 	}
 
 	err := filepath.Walk(pkgPath, walkFunc)
 	if err != nil {
-		return int64(*lenWriter), hash.Sum(nil), err
+		return nil, err
 	}
 
-	err = tw.Close()
+	return pkg, nil
+}
+
+func (pkg *Package) WriteTo(w io.Writer) (int64, error) {
+	var bytesWritten int64
+	w = io.MultiWriter(w, (*lenWriter)(&bytesWritten))
+
+	gw := gzip.NewWriter(w)
+	tw := tar.NewWriter(gw)
+
+	for _, pkgFile := range pkg.Files {
+		th := &tar.Header{
+			Name: pkgFile.Path,
+			Mode: int64(pkgFile.Mode),
+			Size: pkgFile.Size,
+		}
+
+		err := tw.WriteHeader(th)
+		if err != nil {
+			return bytesWritten, fmt.Errorf("failed to write tar header for %s: %v", pkgFile.Path, err)
+		}
+
+		// Use function to defer file.Close()
+		err = func() error {
+			file, err := os.Open(filepath.Join(pkg.Path, pkgFile.Path))
+			if err != nil {
+				return fmt.Errorf("failed to open %s: %v", pkgFile.Path, err)
+			}
+			defer file.Close()
+
+			_, err = io.Copy(tw, file)
+			if err != nil {
+				return fmt.Errorf("failed to copy to tar %s: %v", pkgFile.Path, err)
+			}
+
+			return nil
+		}()
+		if err != nil {
+			return bytesWritten, err
+		}
+	}
+
+	err := tw.Close()
 	if err != nil {
-		return int64(*lenWriter), hash.Sum(nil), err
+		return bytesWritten, err
 	}
 
 	err = gw.Close()
 	if err != nil {
-		return int64(*lenWriter), hash.Sum(nil), err
+		return bytesWritten, err
 	}
 
-	return int64(*lenWriter), hash.Sum(nil), nil
+	return bytesWritten, nil
+}
+
+type lenWriter int64
+
+func (lw *lenWriter) Write(p []byte) (int, error) {
+	*lw += lenWriter(len(p))
+	return len(p), nil
 }
