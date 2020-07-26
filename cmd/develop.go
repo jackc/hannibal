@@ -15,6 +15,9 @@ var developCmd = &cobra.Command{
 	Use:   "develop",
 	Short: "Start development server",
 	Run: func(cmd *cobra.Command, args []string) {
+		viper.BindPFlag("http_service_address", cmd.Flags().Lookup("http-service-address"))
+		viper.BindPFlag("project_path", cmd.Flags().Lookup("project-path"))
+
 		logger := current.Logger(context.Background())
 
 		err := db.ConnectAll(context.Background())
@@ -33,8 +36,5 @@ func init() {
 	rootCmd.AddCommand(developCmd)
 
 	developCmd.Flags().StringP("http-service-address", "a", "127.0.0.1:3000", "HTTP service address")
-	viper.BindPFlag("http_service_address", developCmd.Flags().Lookup("http-service-address"))
-
 	developCmd.Flags().StringP("project-path", "p", ".", "Project path")
-	viper.BindPFlag("project_path", developCmd.Flags().Lookup("project-path"))
 }
