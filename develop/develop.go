@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"sync"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
@@ -49,7 +50,9 @@ func Develop(config *Config) {
 	// HTTP Server
 	r := server.BaseMux(log)
 
-	appHandler, err := server.NewAppHandler(context.Background())
+	reloadMutex := &sync.RWMutex{}
+
+	appHandler, err := server.NewAppHandler(context.Background(), reloadMutex)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create app handler")
 	}

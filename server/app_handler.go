@@ -12,13 +12,13 @@ import (
 )
 
 type AppHandler struct {
-	reloadMutex sync.RWMutex
+	reloadMutex *sync.RWMutex
 
 	router chi.Router
 }
 
-func NewAppHandler(ctx context.Context) (*AppHandler, error) {
-	ah := &AppHandler{}
+func NewAppHandler(ctx context.Context, reloadMutex *sync.RWMutex) (*AppHandler, error) {
+	ah := &AppHandler{reloadMutex: reloadMutex}
 
 	return ah, nil
 }

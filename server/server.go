@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/jackc/hannibal/current"
@@ -27,7 +28,9 @@ func Serve(config *Config) {
 
 	r := BaseMux(log)
 
-	appHandler, err := NewAppHandler(context.Background())
+	reloadMutex := &sync.RWMutex{}
+
+	appHandler, err := NewAppHandler(context.Background(), reloadMutex)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create app handler")
 	}
@@ -38,6 +41,12 @@ func Serve(config *Config) {
 	}
 
 	r.Mount("/", appHandler)
+
+	systemHandler, err := NewSystemHandler(context.Background(), reloadMutex)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create system handler")
+	}
+	r.Mount("/hannibal-system", systemHandler)
 
 	server := &http.Server{
 		Addr:    config.ListenAddress,

@@ -233,5 +233,7 @@ func (d *Deployer) Deploy(ctx context.Context, pkg *Package) error {
 		return fmt.Errorf("HTTP %d %s", response.StatusCode, string(respBody))
 	}
 
+	io.Copy(os.Stdout, response.Body)
+
 	return nil
 }
