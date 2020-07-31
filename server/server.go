@@ -15,10 +15,7 @@ import (
 var shutdownSignals = []os.Signal{os.Interrupt}
 
 type Config struct {
-	ListenAddress        string
-	DatabaseURL          string
-	DatabaseSystemSchema string
-	DatabaseAppSchema    string
+	ListenAddress string
 }
 
 func Serve(config *Config) {
