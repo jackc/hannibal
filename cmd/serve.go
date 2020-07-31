@@ -16,6 +16,7 @@ var serveCmd = &cobra.Command{
 	Short: "Start web server",
 	Run: func(cmd *cobra.Command, args []string) {
 		viper.BindPFlag("http_service_address", cmd.Flags().Lookup("http-service-address"))
+		viper.BindPFlag("app_path", cmd.Flags().Lookup("app-path"))
 
 		logger := current.Logger(context.Background())
 
@@ -26,6 +27,7 @@ var serveCmd = &cobra.Command{
 
 		server.Serve(&server.Config{
 			ListenAddress: viper.GetString("http_service_address"),
+			AppPath:       viper.GetString("app_path"),
 		})
 	},
 }
@@ -34,4 +36,5 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 
 	serveCmd.Flags().StringP("http-service-address", "a", "127.0.0.1:3000", "HTTP service address")
+	serveCmd.Flags().StringP("app-path", "p", ".", "Application path")
 }

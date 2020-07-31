@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/deploy"
@@ -22,10 +21,9 @@ var deployCmd = &cobra.Command{
 
 		logger := current.Logger(context.Background())
 
-		fmt.Println(viper.GetString("project_path"))
-		pkg, err := deploy.NewPackage(viper.GetString("project_path"))
-		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to load project")
+		projectPath := viper.GetString("project_path")
+		if projectPath == "" {
+			logger.Fatal().Msg("project-path is missing")
 		}
 
 		apiKey := viper.GetString("api_key")
@@ -37,13 +35,7 @@ var deployCmd = &cobra.Command{
 			logger.Fatal().Msg("deploy-key is missing")
 		}
 
-		deployer := &deploy.Deployer{
-			URL:       args[0],
-			APIKey:    apiKey,
-			DeployKey: deployKey,
-		}
-
-		err = deployer.Deploy(context.Background(), pkg)
+		err := deploy.Deploy(context.Background(), args[0], apiKey, deployKey, projectPath, nil)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("deploy failed")
 		}

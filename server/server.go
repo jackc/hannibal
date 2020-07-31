@@ -16,6 +16,7 @@ var shutdownSignals = []os.Signal{os.Interrupt}
 
 type Config struct {
 	ListenAddress string
+	AppPath       string
 }
 
 func Serve(config *Config) {
@@ -39,7 +40,7 @@ func Serve(config *Config) {
 
 	r.Mount("/", appHandler)
 
-	systemHandler, err := NewSystemHandler(context.Background(), reloadMutex)
+	systemHandler, err := NewSystemHandler(context.Background(), reloadMutex, config.AppPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create system handler")
 	}

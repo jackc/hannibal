@@ -1,4 +1,4 @@
-package deploy_test
+package deploy
 
 import (
 	"bytes"
@@ -6,17 +6,16 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/jackc/hannibal/deploy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPackageWriteTo(t *testing.T) {
-	pkg, err := deploy.NewPackage("testdata")
+func TestPackageWriterWriteTo(t *testing.T) {
+	pw, err := newPackageWriter("testdata")
 	require.NoError(t, err)
 
 	buf := &bytes.Buffer{}
-	size, err := pkg.WriteTo(buf)
+	size, err := pw.WriteTo(buf)
 	require.NoError(t, err)
 	assert.EqualValues(t, 435, size)
 	assert.EqualValues(t, buf.Len(), size)
