@@ -100,8 +100,13 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 
 	err = deploy.Unpack(pkg, signature, sh.appPath, publicKeys)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
+		if errors.Is(err, deploy.ErrInvalidSignature) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Invalid signature"))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Internal server error"))
+		}
 		return
 	}
 }

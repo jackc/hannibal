@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 )
 
+var ErrInvalidSignature = errors.New("invalid signature")
+
 // Deploy deploys the project at projectPath to the server at URL. httpClient allows for customizing TLS behavior. It
 // may be nil.
 func Deploy(ctx context.Context, url, apiKey, deployKey, projectPath string, httpClient *http.Client) error {
@@ -240,7 +242,7 @@ func (pkg *packageWriter) WriteTo(w io.Writer) (int64, error) {
 func Unpack(pkg io.ReadSeeker, sig []byte, path string, keys []ed25519.PublicKey) error {
 	if validSignature, err := isValidSignature(pkg, sig, keys); err == nil {
 		if !validSignature {
-			return errors.New("invalid signature")
+			return ErrInvalidSignature
 		}
 	} else {
 		return err
