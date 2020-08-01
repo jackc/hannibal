@@ -1,11 +1,16 @@
 package deploy
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"crypto/ed25519"
 	"crypto/sha512"
 	"encoding/hex"
 	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,6 +49,40 @@ func makePackage(t *testing.T, path string) (io.ReadSeeker, []byte) {
 	return pkg, hashDigest.Sum(nil)
 }
 
+func assertEqualFiles(t testing.TB, expectedPath, actualPath string) bool {
+	t.Helper()
+
+	expectedStat, err := os.Stat(expectedPath)
+	if !assert.NoError(t, err) {
+		return false
+	}
+
+	actualStat, err := os.Stat(actualPath)
+	if !assert.NoError(t, err) {
+		return false
+	}
+
+	if !assert.Equalf(t, expectedStat.Mode(), actualStat.Mode(), "files have different modes") {
+		return false
+	}
+
+	expectedBytes, err := ioutil.ReadFile(expectedPath)
+	if !assert.NoError(t, err) {
+		return false
+	}
+
+	actualBytes, err := ioutil.ReadFile(actualPath)
+	if !assert.NoError(t, err) {
+		return false
+	}
+
+	if !assert.Equalf(t, expectedBytes, actualBytes, "file contents differ") {
+		return false
+	}
+
+	return true
+}
+
 func TestUnpack(t *testing.T) {
 	pkg, digest := makePackage(t, "testdata")
 
@@ -55,6 +94,14 @@ func TestUnpack(t *testing.T) {
 	tempDir := t.TempDir()
 	err = Unpack(pkg, signature, tempDir, []ed25519.PublicKey{publicKey})
 	require.NoError(t, err)
+
+	for _, f := range []string{
+		"hello.txt",
+		"sql/first.sql",
+		"sql/manifest.conf",
+	} {
+		assertEqualFiles(t, filepath.Join("testdata", f), filepath.Join(tempDir, f))
+	}
 }
 
 func TestUnpackRejectsInvalidSignature(t *testing.T) {
@@ -69,4 +116,82 @@ func TestUnpackRejectsInvalidSignature(t *testing.T) {
 	tempDir := t.TempDir()
 	err = Unpack(pkg, signature, tempDir, []ed25519.PublicKey{publicKey})
 	require.EqualError(t, err, ErrInvalidSignature.Error())
+}
+
+func TestUnpackToMissingDirectory(t *testing.T) {
+	pkg, digest := makePackage(t, "testdata")
+
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+
+	signature := ed25519.Sign(privateKey, digest)
+
+	err = Unpack(pkg, signature, "/some/missing/directory", []ed25519.PublicKey{publicKey})
+	require.Error(t, err)
+}
+
+func makeBadPackage(t *testing.T, f func(tw *tar.Writer)) (io.ReadSeeker, []byte) {
+	buf := &bytes.Buffer{}
+	gw := gzip.NewWriter(buf)
+	tw := tar.NewWriter(gw)
+
+	f(tw)
+
+	err := tw.Close()
+	require.NoError(t, err)
+
+	err = gw.Close()
+	require.NoError(t, err)
+
+	pkg := bytes.NewReader(buf.Bytes())
+
+	hashDigest := sha512.New()
+	_, err = pkg.WriteTo(hashDigest)
+	require.NoError(t, err)
+	_, _ = pkg.Seek(0, io.SeekStart)
+
+	return pkg, hashDigest.Sum(nil)
+}
+
+func TestUnpackRejectsSymlinks(t *testing.T) {
+	pkg, digest := makeBadPackage(t, func(tw *tar.Writer) {
+		err := tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeSymlink,
+			Name:     "sym",
+			Size:     0,
+			Mode:     0644,
+		})
+		require.NoError(t, err)
+	})
+
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+
+	signature := ed25519.Sign(privateKey, digest)
+
+	tempDir := t.TempDir()
+	err = Unpack(pkg, signature, tempDir, []ed25519.PublicKey{publicKey})
+	require.EqualError(t, err, ErrInvalidPackage.Error())
+}
+
+func TestUnpackRejectsDirectoryTraversal(t *testing.T) {
+	pkg, digest := makeBadPackage(t, func(tw *tar.Writer) {
+		err := tw.WriteHeader(&tar.Header{
+			Name: "../../../etc/passwd-ish", // Don't use actual path to /etc/passwd just in case someone runs this as root and the test fails.
+			Size: 30,
+			Mode: 0600,
+		})
+		require.NoError(t, err)
+
+		tw.Write([]byte("All your base are belong to us"))
+	})
+
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+
+	signature := ed25519.Sign(privateKey, digest)
+
+	tempDir := t.TempDir()
+	err = Unpack(pkg, signature, tempDir, []ed25519.PublicKey{publicKey})
+	require.EqualError(t, err, ErrInvalidPackage.Error())
 }

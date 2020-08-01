@@ -18,9 +18,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 var ErrInvalidSignature = errors.New("invalid signature")
+var ErrInvalidPackage = errors.New("invalid package")
 
 // Deploy deploys the project at projectPath to the server at URL. httpClient allows for customizing TLS behavior. It
 // may be nil.
@@ -274,6 +276,16 @@ func isValidSignature(pkg io.Reader, sig []byte, keys []ed25519.PublicKey) (bool
 }
 
 func decompressPackage(pkg io.Reader, path string) error {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	_, err = os.Stat(path)
+	if err != nil {
+		return err
+	}
+
 	gr, err := gzip.NewReader(pkg)
 	if err != nil {
 		return err
@@ -290,13 +302,44 @@ func decompressPackage(pkg io.Reader, path string) error {
 			return err
 		}
 
+		filename := filepath.Join(path, header.Name)
+
+		// Check for directory traversal.
+		if !strings.HasPrefix(filename, path) {
+			return ErrInvalidPackage
+		}
+
 		switch header.Typeflag {
 		case tar.TypeDir:
-			fmt.Println("dir", header.Name)
+			err := os.Mkdir(filename, os.FileMode(header.Mode&0777))
+			if err != nil {
+				return err
+			}
 		case tar.TypeReg:
-			fmt.Println("reg", header.Name)
+			err := func() (_err error) {
+				file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, os.FileMode(header.Mode&0777))
+				if err != nil {
+					return err
+				}
+				defer func() {
+					err := file.Close()
+					if err != nil && _err == nil {
+						_err = err
+					}
+				}()
+
+				_, err = io.Copy(file, tr)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			}()
+			if err != nil {
+				return err
+			}
 		default:
-			return errors.New("invalid package")
+			return ErrInvalidPackage
 		}
 	}
 
