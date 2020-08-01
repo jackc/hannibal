@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/ed25519"
@@ -72,7 +71,7 @@ func Deploy(ctx context.Context, url, apiKey, deployKey, projectPath string, htt
 			return
 		}
 
-		hashDigest := sha512.New512_256()
+		hashDigest := sha512.New()
 		digestingWriter := io.MultiWriter(partWriter, hashDigest)
 
 		_, err = pkgSrc.WriteTo(digestingWriter)
@@ -82,12 +81,6 @@ func Deploy(ctx context.Context, url, apiKey, deployKey, projectPath string, htt
 		}
 
 		digest := hashDigest.Sum(nil)
-		err = mw.WriteField("digest", hex.EncodeToString(digest))
-		if err != nil {
-			wp.CloseWithError(fmt.Errorf("failed to write digest: %w", err))
-			return
-		}
-
 		signature := ed25519.Sign(privateKey, digest)
 		err = mw.WriteField("signature", hex.EncodeToString(signature))
 		if err != nil {
@@ -243,45 +236,39 @@ func (pkg *packageWriter) WriteTo(w io.Writer) (int64, error) {
 }
 
 // Unpack unpacks pkg to path. It validates that digest matches pkg that sig is the result of signing
-// digest with one of keys.
-func Unpack(pkg io.ReadSeeker, digest, sig []byte, path string, keys []ed25519.PublicKey) error {
-	if !isValidSignature(digest, sig, keys) {
-		return errors.New("invalid signature")
-	}
-
-	if validDigest, err := isValidDigest(digest, pkg); err == nil {
-		if !validDigest {
-			return errors.New("invalid digest")
+// pkg with one of keys.
+func Unpack(pkg io.ReadSeeker, sig []byte, path string, keys []ed25519.PublicKey) error {
+	if validSignature, err := isValidSignature(pkg, sig, keys); err == nil {
+		if !validSignature {
+			return errors.New("invalid signature")
 		}
 	} else {
+		return err
+	}
+
+	_, err := pkg.Seek(0, io.SeekStart)
+	if err != nil {
 		return err
 	}
 
 	return decompressPackage(pkg, path)
 }
 
-func isValidSignature(digest, sig []byte, keys []ed25519.PublicKey) bool {
-	for _, k := range keys {
-		if ed25519.Verify(k, digest, sig) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func isValidDigest(digest []byte, pkg io.ReadSeeker) (bool, error) {
-	hashDigest := sha512.New512_256()
+func isValidSignature(pkg io.Reader, sig []byte, keys []ed25519.PublicKey) (bool, error) {
+	hashDigest := sha512.New()
 	_, err := io.Copy(hashDigest, pkg)
 	if err != nil {
 		return false, err
 	}
-	pkgDigest := hashDigest.Sum(nil)
+	digest := hashDigest.Sum(nil)
 
-	valid := bytes.Compare(digest, pkgDigest) == 0
+	for _, k := range keys {
+		if ed25519.Verify(k, digest, sig) {
+			return true, nil
+		}
+	}
 
-	_, err = pkg.Seek(0, io.SeekStart)
-	return valid, err
+	return false, nil
 }
 
 func decompressPackage(pkg io.Reader, path string) error {

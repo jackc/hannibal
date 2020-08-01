@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -60,12 +61,11 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 
 	userID, err := system.AuthenticateUserByAPIKeyString(ctx, authorizationHeaderParts[1])
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte("Forbidden"))
+			w.Write([]byte("Authorization header contains incorrect API key"))
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintln(w, err)
 			w.Write([]byte("Internal server error"))
 		}
 		return
@@ -73,18 +73,16 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 
 	pkg, _, err := req.FormFile("pkg")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
+		if errors.Is(err, http.ErrMissingFile) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Missing pkg file upload"))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Internal server error"))
+		}
 		return
 	}
 	defer pkg.Close()
-
-	digest, err := hex.DecodeString(req.FormValue("digest"))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
-		return
-	}
 
 	signature, err := hex.DecodeString(req.FormValue("signature"))
 	if err != nil {
@@ -100,7 +98,7 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = deploy.Unpack(pkg, digest, signature, sh.appPath, publicKeys)
+	err = deploy.Unpack(pkg, signature, sh.appPath, publicKeys)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Internal server error"))
