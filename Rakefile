@@ -12,6 +12,16 @@ require "erb"
 
 CLOBBER.include("tmp")
 
+def passthrough_args
+  i = ARGV.index("--")
+  args = i ? ARGV[(i+1)..-1].join(' ') : nil
+  unless args
+    puts 'No arguments received. Pass arguments after "--"'
+    exit 1
+  end
+  args
+end
+
 directory "tmp/development/bin"
 
 file "embed/statik/statik.go" => FileList["embed/root/**/*"] do
@@ -22,31 +32,22 @@ file "tmp/development/bin/hannibal" => ["embed/statik/statik.go", *FileList["**/
   sh "go build -o tmp/development/bin/hannibal"
 end
 
-file "tmp/development/.sql-installed" => "postgresql/setup.sql" do |t|
-  sh "psql -f postgresql/setup.sql"
-  sh "touch tmp/development/.sql-installed"
-end
-
-
 namespace :build do
   desc "Build backend"
   task backend: ["tmp/development/bin/hannibal"]
-
-  desc "Install SQL"
-  task installsql: ["tmp/development/.sql-installed"]
 end
 
 desc "Build backend and frontend"
 task build: ["build:backend"]
 
 desc "Run hannibal"
-task run: ["build:installsql", "build:backend"] do
-  exec "tmp/development/bin/hannibal serve"
+task run: ["build:backend"] do
+  exec "tmp/development/bin/hannibal #{passthrough_args}"
 end
 
-desc "Watch for source changes and rebuild and rerun"
+desc "Watch for source changes, rebuild and rerun"
 task :rerun do
-  exec "react2fs -include='\.(go|sql)$' rake run"
+  exec "react2fs -include='\.(go|sql)$' rake run -- #{passthrough_args}"
 end
 
 desc "Run backend tests"
