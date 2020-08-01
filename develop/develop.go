@@ -2,7 +2,6 @@ package develop
 
 import (
 	"context"
-	"io/ioutil"
 	"net/http"
 	"path/filepath"
 	"sync"
@@ -11,11 +10,8 @@ import (
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/develop/fs"
 	"github.com/jackc/hannibal/server"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/tern/migrate"
 
 	_ "github.com/jackc/hannibal/embed/statik"
-	statikfs "github.com/rakyll/statik/fs"
 )
 
 type Config struct {
@@ -27,6 +23,7 @@ func Develop(config *Config) {
 	log := *current.Logger(context.Background())
 
 	db.RequireCorrectVersion(context.Background())
+	dbconfig := db.GetConfig(context.Background())
 
 	watcher, err := fs.NewWatcher()
 	if err != nil {
@@ -40,7 +37,7 @@ func Develop(config *Config) {
 	}
 
 	// install sql code on startup
-	err = installSQL(context.Background(), sqlPath)
+	err = db.InstallCodePackage(context.Background(), dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to install sql")
 	} else {
@@ -81,7 +78,7 @@ func Develop(config *Config) {
 		select {
 		case event := <-watcher.Events:
 			log.Info().Str("name", event.Name).Str("op", event.Op.String()).Msg("file change detected")
-			err := installSQL(context.Background(), sqlPath)
+			err := db.InstallCodePackage(context.Background(), dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to install sql")
 			} else {
@@ -98,51 +95,4 @@ func Develop(config *Config) {
 			log.Fatal().Err(err).Msg("file system watcher error")
 		}
 	}
-}
-
-func installSQL(ctx context.Context, sqlPath string) error {
-	cps, err := migrate.LoadCodePackageSource(sqlPath)
-	if err != nil {
-		return err
-	}
-
-	statikFS, err := statikfs.New()
-	if err != nil {
-		return err
-	}
-
-	file, err := statikFS.Open("/app_setup.sql")
-	if err != nil {
-		return err
-	}
-
-	buf, err := ioutil.ReadAll(file)
-	if err != nil {
-		return err
-	}
-
-	appSetupName := "app_setup.sql"
-
-	dbconfig := db.GetConfig(ctx)
-
-	cps.Schema = dbconfig.AppSchema
-	cps.Manifest = append([]string{appSetupName}, cps.Manifest...)
-	cps.SourceCode[appSetupName] = string(buf)
-
-	conn, err := pgx.Connect(ctx, dbconfig.SysConnString)
-	if err != nil {
-		return err
-	}
-
-	codePackage, err := cps.Compile()
-	if err != nil {
-		return err
-	}
-
-	err = codePackage.Install(ctx, conn, map[string]interface{}{})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

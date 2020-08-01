@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/jackc/hannibal/current"
+	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/deploy"
 	"github.com/jackc/hannibal/system"
 	"github.com/jackc/pgx/v4"
