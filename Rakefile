@@ -47,7 +47,7 @@ end
 
 desc "Watch for source changes, rebuild and rerun"
 task :rerun do
-  exec "react2fs -include='\.(go|sql)$' -exclude='^tmp|^\.' rake run -- #{passthrough_args}"
+  exec "react2fs -include='\\.(go|sql)$' -exclude='^tmp|^\\.' rake run -- #{passthrough_args}"
 end
 
 desc "Run backend tests"
