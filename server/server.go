@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"time"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
+	"github.com/jackc/hannibal/reload"
 )
 
 var shutdownSignals = []os.Signal{os.Interrupt}
@@ -26,25 +26,23 @@ func Serve(config *Config) {
 
 	r := BaseMux(log)
 
-	reloadMutex := &sync.RWMutex{}
+	reloadSystem := &reload.System{}
 
-	appHandler, err := NewAppHandler(context.Background(), reloadMutex)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create app handler")
-	}
-
-	err = appHandler.Load(context.Background())
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to load app handler")
-	}
+	appHandler := NewAppHandler()
+	reloadSystem.Register(appHandler)
 
 	r.Mount("/", appHandler)
 
-	systemHandler, err := NewSystemHandler(context.Background(), reloadMutex, config.AppPath)
+	systemHandler, err := NewSystemHandler(reloadSystem, config.AppPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create system handler")
 	}
 	r.Mount("/hannibal-system", systemHandler)
+
+	err = reloadSystem.Reload(context.Background(), func() error { return nil })
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load app")
+	}
 
 	server := &http.Server{
 		Addr:    config.ListenAddress,

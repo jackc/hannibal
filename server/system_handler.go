@@ -15,22 +15,24 @@ import (
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/deploy"
+	"github.com/jackc/hannibal/reload"
 	"github.com/jackc/hannibal/system"
 	"github.com/jackc/pgx/v4"
 )
 
 type SystemHandler struct {
-	reloadMutex *sync.RWMutex
+	deployMutex sync.Mutex
 
-	router  chi.Router
-	appPath string
+	router       chi.Router
+	reloadSystem *reload.System
+	appPath      string
 }
 
-func NewSystemHandler(ctx context.Context, reloadMutex *sync.RWMutex, appPath string) (*SystemHandler, error) {
+func NewSystemHandler(rs *reload.System, appPath string) (*SystemHandler, error) {
 	sh := &SystemHandler{
-		reloadMutex: reloadMutex,
-		router:      chi.NewRouter(),
-		appPath:     appPath,
+		router:       chi.NewRouter(),
+		reloadSystem: rs,
+		appPath:      appPath,
 	}
 
 	sh.router.Post("/deploy", sh.deploy)
@@ -39,18 +41,12 @@ func NewSystemHandler(ctx context.Context, reloadMutex *sync.RWMutex, appPath st
 }
 
 func (sh *SystemHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	sh.reloadMutex.RLock()
-	defer sh.reloadMutex.RUnlock()
-
 	sh.router.ServeHTTP(w, req)
 }
 
 func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
-	sh.reloadMutex.RUnlock()     // Cannot get the write lock when we already have the read lock.
-	defer sh.reloadMutex.RLock() // Reacquire read lock so ServeHTTP can successfully unlock.
-
-	sh.reloadMutex.Lock()
-	defer sh.reloadMutex.Unlock()
+	sh.deployMutex.Lock()
+	defer sh.deployMutex.Unlock()
 
 	ctx := req.Context()
 
@@ -126,7 +122,34 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// TODO - deploy database code -- then once successfully deployed
+	dbconfig := db.GetConfig(ctx)
+	sqlPath := filepath.Join(nextPath, "sql")
+	nextSchema := fmt.Sprintf("%s_next", dbconfig.AppSchema)
+	err = db.InstallCodePackage(context.Background(), dbconfig.SysConnString, nextSchema, sqlPath)
+	if err != nil {
+		current.Logger(ctx).Error().Caller().Err(err).Send()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = sh.reloadSystem.Reload(ctx, func() error {
+		_, err := db.Sys(ctx).Exec(ctx, fmt.Sprintf("drop schema if exists %s cascade", db.QuoteSchema(dbconfig.AppSchema)))
+		if err != nil {
+			return err
+		}
+
+		_, err = db.Sys(ctx).Exec(ctx, fmt.Sprintf("alter schema %s rename to %s", db.QuoteSchema(nextSchema), db.QuoteSchema(dbconfig.AppSchema)))
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		current.Logger(ctx).Error().Caller().Err(err).Send()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	err = os.RemoveAll(previousPath)
 	if err != nil {
@@ -151,4 +174,6 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	current.Logger(ctx).Info().Msg("Successful deploy")
 }

@@ -12,21 +12,26 @@ import (
 )
 
 type AppHandler struct {
-	reloadMutex *sync.RWMutex
-
-	router chi.Router
+	reloadMutex sync.RWMutex
+	router      chi.Router
 }
 
-func NewAppHandler(ctx context.Context, reloadMutex *sync.RWMutex) (*AppHandler, error) {
-	ah := &AppHandler{reloadMutex: reloadMutex}
-
-	return ah, nil
+func NewAppHandler() *AppHandler {
+	return &AppHandler{router: chi.NewRouter()}
 }
 
-func (ah *AppHandler) Load(ctx context.Context) error {
+func (ah *AppHandler) LockForReload(ctx context.Context) error {
 	ah.reloadMutex.Lock()
-	defer ah.reloadMutex.Unlock()
+	return nil
+}
 
+func (ah *AppHandler) UnlockAndReload(ctx context.Context) error {
+	defer ah.reloadMutex.Unlock()
+	return ah.load(ctx)
+}
+
+// load loads the routes. It requires the reloadMutex already be locked.
+func (ah *AppHandler) load(ctx context.Context) error {
 	var handlers []Handler
 	err := pgxutil.SelectAllStruct(context.Background(), db.Sys(ctx), &handlers,
 		fmt.Sprintf("select * from %s.get_handlers()", db.QuoteSchema(db.GetConfig(ctx).SysSchema)),

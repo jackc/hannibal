@@ -4,11 +4,11 @@ import (
 	"context"
 	"net/http"
 	"path/filepath"
-	"sync"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/develop/fs"
+	"github.com/jackc/hannibal/reload"
 	"github.com/jackc/hannibal/server"
 
 	_ "github.com/jackc/hannibal/embed/statik"
@@ -47,14 +47,12 @@ func Develop(config *Config) {
 	// HTTP Server
 	r := server.BaseMux(log)
 
-	reloadMutex := &sync.RWMutex{}
+	reloadSystem := &reload.System{}
 
-	appHandler, err := server.NewAppHandler(context.Background(), reloadMutex)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create app handler")
-	}
+	appHandler := server.NewAppHandler()
+	reloadSystem.Register(appHandler)
 
-	err = appHandler.Load(context.Background())
+	err = reloadSystem.Reload(context.Background(), func() error { return nil })
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to load app handler")
 	}
@@ -65,6 +63,8 @@ func Develop(config *Config) {
 		Addr:    config.ListenAddress,
 		Handler: r,
 	}
+
+	log.Info().Str("addr", server.Addr).Msg("Starting HTTP server")
 
 	go func() {
 		err = server.ListenAndServe()
@@ -78,18 +78,20 @@ func Develop(config *Config) {
 		select {
 		case event := <-watcher.Events:
 			log.Info().Str("name", event.Name).Str("op", event.Op.String()).Msg("file change detected")
-			err := db.InstallCodePackage(context.Background(), dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to install sql")
-			} else {
-				log.Info().Msg("updated sql")
-			}
 
-			err = appHandler.Load(context.Background())
+			err := reloadSystem.Reload(context.Background(), func() error {
+				err := db.InstallCodePackage(context.Background(), dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
+				if err != nil {
+					log.Error().Err(err).Msg("failed to install sql")
+				} else {
+					log.Info().Msg("updated sql")
+				}
+				return err
+			})
 			if err != nil {
-				log.Error().Err(err).Msg("failed to reload app handler")
+				log.Error().Err(err).Msg("reload failed")
 			} else {
-				log.Info().Msg("reloaded app handler")
+				log.Info().Msg("reload succeeded")
 			}
 		case err := <-watcher.Errors:
 			log.Fatal().Err(err).Msg("file system watcher error")
