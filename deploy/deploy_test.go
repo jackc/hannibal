@@ -130,7 +130,7 @@ func TestUnpackToMissingDirectory(t *testing.T) {
 	require.Error(t, err)
 }
 
-func makeBadPackage(t *testing.T, f func(tw *tar.Writer)) (io.ReadSeeker, []byte) {
+func makePackageFunc(t *testing.T, f func(tw *tar.Writer)) (io.ReadSeeker, []byte) {
 	buf := &bytes.Buffer{}
 	gw := gzip.NewWriter(buf)
 	tw := tar.NewWriter(gw)
@@ -154,7 +154,7 @@ func makeBadPackage(t *testing.T, f func(tw *tar.Writer)) (io.ReadSeeker, []byte
 }
 
 func TestUnpackRejectsSymlinks(t *testing.T) {
-	pkg, digest := makeBadPackage(t, func(tw *tar.Writer) {
+	pkg, digest := makePackageFunc(t, func(tw *tar.Writer) {
 		err := tw.WriteHeader(&tar.Header{
 			Typeflag: tar.TypeSymlink,
 			Name:     "sym",
@@ -175,7 +175,7 @@ func TestUnpackRejectsSymlinks(t *testing.T) {
 }
 
 func TestUnpackRejectsDirectoryTraversal(t *testing.T) {
-	pkg, digest := makeBadPackage(t, func(tw *tar.Writer) {
+	pkg, digest := makePackageFunc(t, func(tw *tar.Writer) {
 		err := tw.WriteHeader(&tar.Header{
 			Name: "../../../etc/passwd-ish", // Don't use actual path to /etc/passwd just in case someone runs this as root and the test fails.
 			Size: 30,
