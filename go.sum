@@ -189,10 +189,6 @@ github.com/jackc/puddle v0.0.0-20190608224051-11cab39313c9/go.mod h1:m4B5Dj62Y0f
 github.com/jackc/puddle v1.1.0/go.mod h1:m4B5Dj62Y0fbyuIc15OsIqK0+JU8nkqQjsgx7dvjSWk=
 github.com/jackc/puddle v1.1.1 h1:PJAw7H/9hoWC4Kf3J8iNmL1SwA6E8vfsLqBiL+F6CtI=
 github.com/jackc/puddle v1.1.1/go.mod h1:m4B5Dj62Y0fbyuIc15OsIqK0+JU8nkqQjsgx7dvjSWk=
-github.com/jackc/tern v1.12.2-0.20200704185711-eb3294d0ca06 h1:9rCynwNj1yGH3fRGhUFlWOtIXyMIt0AeNOS7uK3bz20=
-github.com/jackc/tern v1.12.2-0.20200704185711-eb3294d0ca06/go.mod h1:ErkzK1SBfTzc4GJNsiGiRKKSr14bMKYWU8+WNQbbZcw=
-github.com/jackc/tern v1.12.2-0.20200704220057-fea69f49b5c2 h1:AGMMYD6UwDQV9eQZ4Xi9OX9Wxl6LmMYdhMKcdwf/F6o=
-github.com/jackc/tern v1.12.2-0.20200704220057-fea69f49b5c2/go.mod h1:ErkzK1SBfTzc4GJNsiGiRKKSr14bMKYWU8+WNQbbZcw=
 github.com/jackc/tern v1.12.2-0.20200711223825-7cd897735b6f h1:v7yp4LvqWO7WPe+zytJypZzq+b/CqCAkDQRBnUlqHGA=
 github.com/jackc/tern v1.12.2-0.20200711223825-7cd897735b6f/go.mod h1:ErkzK1SBfTzc4GJNsiGiRKKSr14bMKYWU8+WNQbbZcw=
 github.com/jonboulle/clockwork v0.1.0/go.mod h1:Ii8DK3G1RaLaWxj9trq07+26W01tbo22gdxWY5EU2bo=
