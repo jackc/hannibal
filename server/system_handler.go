@@ -54,19 +54,16 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 
 	authorizationHeaderParts := strings.SplitN(req.Header.Get("Authorization"), " ", 2)
 	if len(authorizationHeaderParts) != 2 || authorizationHeaderParts[0] != "hannibal" {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("Authorization header is missing or incorrectly formatted"))
+		http.Error(w, "Authorization header is missing or incorrectly formatted", http.StatusForbidden)
 		return
 	}
 
 	userID, err := system.AuthenticateUserByAPIKeyString(ctx, authorizationHeaderParts[1])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte("Authorization header contains incorrect API key"))
+			http.Error(w, "Authorization header contains incorrect API key", http.StatusForbidden)
 		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Internal server error"))
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -74,11 +71,9 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 	pkg, _, err := req.FormFile("pkg")
 	if err != nil {
 		if errors.Is(err, http.ErrMissingFile) {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Missing pkg file upload"))
+			http.Error(w, "Missing pkg file upload", http.StatusBadRequest)
 		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Internal server error"))
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -86,26 +81,22 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 
 	signature, err := hex.DecodeString(req.FormValue("signature"))
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	publicKeys, err := system.GetDeployPublicKeysForUserID(ctx, userID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	err = deploy.Unpack(pkg, signature, sh.appPath, publicKeys)
 	if err != nil {
 		if errors.Is(err, deploy.ErrInvalidSignature) {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Invalid signature"))
+			http.Error(w, "Invalid signature", http.StatusBadRequest)
 		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Internal server error"))
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
