@@ -2,13 +2,11 @@ package develop
 
 import (
 	"context"
-	"net/http"
 	"path/filepath"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/develop/fs"
-	"github.com/jackc/hannibal/reload"
 	"github.com/jackc/hannibal/server"
 
 	_ "github.com/jackc/hannibal/embed/statik"
@@ -23,7 +21,6 @@ func Develop(config *Config) {
 	log := *current.Logger(context.Background())
 
 	db.RequireCorrectVersion(context.Background())
-	dbconfig := db.GetConfig(context.Background())
 
 	watcher, err := fs.NewWatcher()
 	if err != nil {
@@ -36,40 +33,21 @@ func Develop(config *Config) {
 		log.Fatal().Err(err).Msg("failed to watch sql directory")
 	}
 
-	// install sql code on startup
-	err = db.InstallCodePackage(context.Background(), dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
+	host := &server.Host{
+		HTTPListenAddr: config.ListenAddress,
+	}
+
+	err = host.Load(context.Background(), config.ProjectPath)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to install sql")
-	} else {
-		log.Info().Msg("updated sql")
+		log.Error().Err(err).Msg("failed to load project")
 	}
 
-	// HTTP Server
-	r := server.BaseMux(log)
-
-	reloadSystem := &reload.System{}
-
-	appHandler := server.NewAppHandler()
-	reloadSystem.Register(appHandler)
-
-	err = reloadSystem.Reload(context.Background(), func() error { return nil })
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to load app handler")
-	}
-
-	r.Mount("/", appHandler)
-
-	server := &http.Server{
-		Addr:    config.ListenAddress,
-		Handler: r,
-	}
-
-	log.Info().Str("addr", server.Addr).Msg("Starting HTTP server")
+	log.Info().Str("addr", host.HTTPListenAddr).Msg("Starting HTTP server")
 
 	go func() {
-		err = server.ListenAndServe()
-		if err != http.ErrServerClosed {
-			log.Fatal().Err(err).Msg("could not start HTTP server")
+		err = host.ListenAndServe()
+		if err != nil {
+			log.Fatal().Err(err).Msg("could not start server")
 		}
 	}()
 	// End HTTP Server
@@ -79,15 +57,7 @@ func Develop(config *Config) {
 		case event := <-watcher.Events:
 			log.Info().Str("name", event.Name).Str("op", event.Op.String()).Msg("file change detected")
 
-			err := reloadSystem.Reload(context.Background(), func() error {
-				err := db.InstallCodePackage(context.Background(), dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
-				if err != nil {
-					log.Error().Err(err).Msg("failed to install sql")
-				} else {
-					log.Info().Msg("updated sql")
-				}
-				return err
-			})
+			err := host.Load(context.Background(), config.ProjectPath)
 			if err != nil {
 				log.Error().Err(err).Msg("reload failed")
 			} else {

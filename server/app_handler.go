@@ -4,40 +4,19 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sync"
 
 	"github.com/go-chi/chi"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgxutil"
 )
 
-type AppHandler struct {
-	reloadMutex sync.RWMutex
-	router      chi.Router
-}
-
-func NewAppHandler() *AppHandler {
-	return &AppHandler{router: chi.NewRouter()}
-}
-
-func (ah *AppHandler) LockForReload(ctx context.Context) error {
-	ah.reloadMutex.Lock()
-	return nil
-}
-
-func (ah *AppHandler) UnlockAndReload(ctx context.Context) error {
-	defer ah.reloadMutex.Unlock()
-	return ah.load(ctx)
-}
-
-// load loads the routes. It requires the reloadMutex already be locked.
-func (ah *AppHandler) load(ctx context.Context) error {
+func NewAppHandler(ctx context.Context) (http.Handler, error) {
 	var handlers []Handler
 	err := pgxutil.SelectAllStruct(context.Background(), db.Sys(ctx), &handlers,
 		fmt.Sprintf("select * from %s.get_handlers()", db.QuoteSchema(db.GetConfig(ctx).SysSchema)),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to read handlers: %v", err)
+		return nil, fmt.Errorf("failed to read handlers: %v", err)
 	}
 
 	router := chi.NewRouter()
@@ -55,16 +34,7 @@ func (ah *AppHandler) load(ctx context.Context) error {
 		router.Method(h.Method, h.Pattern, jh)
 	}
 
-	ah.router = router
-
-	return nil
-}
-
-func (ah *AppHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	ah.reloadMutex.RLock()
-	defer ah.reloadMutex.RUnlock()
-
-	ah.router.ServeHTTP(w, req)
+	return router, nil
 }
 
 type HandlerParam struct {

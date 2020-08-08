@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-chi/chi"
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/deploy"
@@ -20,33 +19,92 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
-type SystemHandler struct {
-	deployMutex sync.Mutex
+type Host struct {
+	HTTPListenAddr string
+	AppPath        string
 
-	router       chi.Router
+	httpServer   *http.Server
+	deployMutex  sync.Mutex
+	installMutex sync.RWMutex
 	reloadSystem *reload.System
-	appPath      string
+	appHandler   http.Handler
 }
 
-func NewSystemHandler(rs *reload.System, appPath string) (*SystemHandler, error) {
-	sh := &SystemHandler{
-		router:       chi.NewRouter(),
-		reloadSystem: rs,
-		appPath:      appPath,
+func (h *Host) ListenAndServe() error {
+	log := *current.Logger(context.Background())
+
+	r := BaseMux(log)
+
+	h.reloadSystem = &reload.System{}
+
+	var err error
+	h.appHandler, err = NewAppHandler(context.Background())
+	if err != nil {
+		return err
 	}
 
-	sh.router.Post("/deploy", sh.deploy)
+	r.Mount("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		h.installMutex.RLock()
+		defer h.installMutex.RUnlock()
 
-	return sh, nil
+		h.appHandler.ServeHTTP(w, req)
+	}))
+
+	if h.AppPath != "" {
+		r.Post("/hannibal-system/deploy", h.handleDeploy)
+	}
+
+	h.httpServer = &http.Server{
+		Addr:    h.HTTPListenAddr,
+		Handler: r,
+	}
+
+	err = h.httpServer.ListenAndServe()
+	if err != http.ErrServerClosed {
+		return fmt.Errorf("could not start HTTP server: %v", err)
+	}
+
+	return nil
 }
 
-func (sh *SystemHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	sh.router.ServeHTTP(w, req)
+func (h *Host) Shutdown(ctx context.Context) error {
+	h.httpServer.SetKeepAlivesEnabled(false)
+	err := h.httpServer.Shutdown(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
-	sh.deployMutex.Lock()
-	defer sh.deployMutex.Unlock()
+func (h *Host) Load(ctx context.Context, projectPath string) error {
+	h.installMutex.Lock()
+	defer h.installMutex.Unlock()
+
+	h.appHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`Failed to load project`))
+	})
+
+	dbconfig := db.GetConfig(ctx)
+	sqlPath := filepath.Join(projectPath, "sql")
+
+	err := db.InstallCodePackage(context.Background(), dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
+	if err != nil {
+		return err
+	}
+
+	newAppHandler, err := NewAppHandler(ctx)
+	if err != nil {
+		return err
+	}
+
+	h.appHandler = newAppHandler
+	return nil
+}
+
+func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
+	h.deployMutex.Lock()
+	defer h.deployMutex.Unlock()
 
 	ctx := req.Context()
 
@@ -93,9 +151,9 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	nextPath := filepath.Join(sh.appPath, "next")
-	currentPath := filepath.Join(sh.appPath, "current")
-	previousPath := filepath.Join(sh.appPath, "previous")
+	nextPath := filepath.Join(h.AppPath, "next")
+	currentPath := filepath.Join(h.AppPath, "current")
+	previousPath := filepath.Join(h.AppPath, "previous")
 
 	err = os.RemoveAll(nextPath)
 	if err != nil {
@@ -132,19 +190,26 @@ func (sh *SystemHandler) deploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = sh.reloadSystem.Reload(ctx, func() error {
-		_, err := db.Sys(ctx).Exec(ctx, fmt.Sprintf("drop schema if exists %s cascade", db.QuoteSchema(dbconfig.AppSchema)))
-		if err != nil {
-			return err
-		}
+	newAppHandler, err := NewAppHandler(ctx)
+	if err != nil {
+		current.Logger(ctx).Error().Caller().Err(err).Send()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
-		_, err = db.Sys(ctx).Exec(ctx, fmt.Sprintf("alter schema %s rename to %s", db.QuoteSchema(nextSchema), db.QuoteSchema(dbconfig.AppSchema)))
-		if err != nil {
-			return err
-		}
+	h.installMutex.Lock()
+	defer h.installMutex.Unlock()
 
-		return nil
-	})
+	h.appHandler = newAppHandler
+
+	_, err = db.Sys(ctx).Exec(ctx, fmt.Sprintf("drop schema if exists %s cascade", db.QuoteSchema(dbconfig.AppSchema)))
+	if err != nil {
+		current.Logger(ctx).Error().Caller().Err(err).Send()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = db.Sys(ctx).Exec(ctx, fmt.Sprintf("alter schema %s rename to %s", db.QuoteSchema(nextSchema), db.QuoteSchema(dbconfig.AppSchema)))
 	if err != nil {
 		current.Logger(ctx).Error().Caller().Err(err).Send()
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

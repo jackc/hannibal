@@ -2,14 +2,12 @@ package server
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
-	"github.com/jackc/hannibal/reload"
 )
 
 var shutdownSignals = []os.Signal{os.Interrupt}
@@ -21,33 +19,13 @@ type Config struct {
 
 func Serve(config *Config) {
 	db.RequireCorrectVersion(context.Background())
-
 	log := *current.Logger(context.Background())
 
-	r := BaseMux(log)
-
-	reloadSystem := &reload.System{}
-
-	appHandler := NewAppHandler()
-	reloadSystem.Register(appHandler)
-
-	r.Mount("/", appHandler)
-
-	systemHandler, err := NewSystemHandler(reloadSystem, config.AppPath)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create system handler")
-	}
-	r.Mount("/hannibal-system", systemHandler)
-
-	err = reloadSystem.Reload(context.Background(), func() error { return nil })
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to load app")
+	host := &Host{
+		HTTPListenAddr: config.ListenAddress,
+		AppPath:        config.AppPath,
 	}
 
-	server := &http.Server{
-		Addr:    config.ListenAddress,
-		Handler: r,
-	}
 	interruptChan := make(chan os.Signal, 1)
 	signal.Notify(interruptChan, shutdownSignals...)
 	go func() {
@@ -56,16 +34,15 @@ func Serve(config *Config) {
 		log.Info().Str("signal", s.String()).Msg("shutdown signal received")
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		server.SetKeepAlivesEnabled(false)
-		err := server.Shutdown(ctx)
+
+		err := host.Shutdown(ctx)
 		if err != nil {
-			log.Error().Err(err).Msg("graceful HTTP server shutdown failed")
+			log.Error().Err(err).Msg("graceful shutdown failed")
 		}
 	}()
 
-	err = server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatal().Err(err).Msg("could not start HTTP server")
+	err := host.ListenAndServe()
+	if err != nil {
+		log.Fatal().Err(err).Msg("unable to start")
 	}
-
 }
