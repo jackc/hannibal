@@ -1,12 +1,12 @@
 routes:
   - path: /foo/bar
     func: get_bar
-    params:
+    query_params:
       - name: foo
       - name: bar
 
   - path: /baz/:id
     func: get_baz
-    params:
+    query_params:
       - name: id
         type: int

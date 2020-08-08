@@ -33,6 +33,12 @@ func Develop(config *Config) {
 		log.Fatal().Err(err).Msg("failed to watch sql directory")
 	}
 
+	configPath := filepath.Join(config.ProjectPath, "config")
+	err = watcher.Add(configPath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to watch config directory")
+	}
+
 	host := &server.Host{
 		HTTPListenAddr: config.ListenAddress,
 	}

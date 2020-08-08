@@ -1,4 +1,4 @@
-package reload
+package appconf
 
 import (
 	"fmt"
@@ -10,14 +10,15 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type AppConfig struct {
+type Config struct {
 	Routes []Route
 }
 
 type Route struct {
-	Path   string
-	Func   string
-	Params []RouteParams
+	Path        string
+	Method      string
+	Func        string
+	QueryParams []RouteParams `yaml:"query_params"`
 }
 
 type RouteParams struct {
@@ -25,22 +26,22 @@ type RouteParams struct {
 	Type string
 }
 
-func (ac *AppConfig) Merge(other *AppConfig) {
-	ac.Routes = append(ac.Routes, other.Routes...)
+func (c *Config) Merge(other *Config) {
+	c.Routes = append(c.Routes, other.Routes...)
 }
 
-func New(yml []byte) (*AppConfig, error) {
-	ac := &AppConfig{}
-	err := yaml.UnmarshalStrict(yml, &ac)
+func New(yml []byte) (*Config, error) {
+	c := &Config{}
+	err := yaml.UnmarshalStrict(yml, &c)
 	if err != nil {
 		return nil, err
 	}
-	return ac, nil
+	return c, nil
 }
 
-func Load(path string) (*AppConfig, error) {
+func Load(path string) (*Config, error) {
 	filesFound := 0
-	appConfig := &AppConfig{}
+	config := &Config{}
 
 	walkFunc := func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -53,12 +54,12 @@ func Load(path string) (*AppConfig, error) {
 			if err != nil {
 				return err
 			}
-			ac, err := New(yml)
+			c, err := New(yml)
 			if err != nil {
 				return err
 			}
 
-			appConfig.Merge(ac)
+			config.Merge(c)
 
 			return nil
 		}
@@ -75,5 +76,5 @@ func Load(path string) (*AppConfig, error) {
 		return nil, fmt.Errorf("no yml files found in %s", path)
 	}
 
-	return appConfig, nil
+	return config, nil
 }

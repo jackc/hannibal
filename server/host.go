@@ -11,10 +11,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jackc/hannibal/appconf"
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/deploy"
-	"github.com/jackc/hannibal/reload"
 	"github.com/jackc/hannibal/system"
 	"github.com/jackc/pgx/v4"
 )
@@ -26,7 +26,6 @@ type Host struct {
 	httpServer   *http.Server
 	deployMutex  sync.Mutex
 	installMutex sync.RWMutex
-	reloadSystem *reload.System
 	appHandler   http.Handler
 }
 
@@ -35,12 +34,11 @@ func (h *Host) ListenAndServe() error {
 
 	r := BaseMux(log)
 
-	h.reloadSystem = &reload.System{}
-
-	var err error
-	h.appHandler, err = NewAppHandler(context.Background())
-	if err != nil {
-		return err
+	if h.appHandler == nil {
+		h.appHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`No project loaded`))
+		})
 	}
 
 	r.Mount("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -59,7 +57,7 @@ func (h *Host) ListenAndServe() error {
 		Handler: r,
 	}
 
-	err = h.httpServer.ListenAndServe()
+	err := h.httpServer.ListenAndServe()
 	if err != http.ErrServerClosed {
 		return fmt.Errorf("could not start HTTP server: %v", err)
 	}
@@ -85,15 +83,21 @@ func (h *Host) Load(ctx context.Context, projectPath string) error {
 		w.Write([]byte(`Failed to load project`))
 	})
 
-	dbconfig := db.GetConfig(ctx)
-	sqlPath := filepath.Join(projectPath, "sql")
-
-	err := db.InstallCodePackage(context.Background(), dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
+	configPath := filepath.Join(projectPath, "config")
+	appConfig, err := appconf.Load(configPath)
 	if err != nil {
 		return err
 	}
 
-	newAppHandler, err := NewAppHandler(ctx)
+	dbconfig := db.GetConfig(ctx)
+	sqlPath := filepath.Join(projectPath, "sql")
+
+	err = db.InstallCodePackage(ctx, dbconfig.SysConnString, dbconfig.AppSchema, sqlPath)
+	if err != nil {
+		return err
+	}
+
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig.Routes)
 	if err != nil {
 		return err
 	}
@@ -180,17 +184,25 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	dbconfig := db.GetConfig(ctx)
-	sqlPath := filepath.Join(nextPath, "sql")
-	nextSchema := fmt.Sprintf("%s_next", dbconfig.AppSchema)
-	err = db.InstallCodePackage(context.Background(), dbconfig.SysConnString, nextSchema, sqlPath)
+	configPath := filepath.Join(nextPath, "config")
+	appConfig, err := appconf.Load(configPath)
 	if err != nil {
 		current.Logger(ctx).Error().Caller().Err(err).Send()
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	newAppHandler, err := NewAppHandler(ctx)
+	dbconfig := db.GetConfig(ctx)
+	sqlPath := filepath.Join(nextPath, "sql")
+	nextSchema := fmt.Sprintf("%s_next", dbconfig.AppSchema)
+	err = db.InstallCodePackage(ctx, dbconfig.SysConnString, nextSchema, sqlPath)
+	if err != nil {
+		current.Logger(ctx).Error().Caller().Err(err).Send()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig.Routes)
 	if err != nil {
 		current.Logger(ctx).Error().Caller().Err(err).Send()
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

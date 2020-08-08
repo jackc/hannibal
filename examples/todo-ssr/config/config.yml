@@ -1,0 +1,5 @@
+routes:
+  - path: /get_time
+    func: get_time
+    query_params:
+      - name: name

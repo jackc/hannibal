@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgtype"
 	pgtypeuuid "github.com/jackc/pgtype/ext/gofrs-uuid"
 	shopspring "github.com/jackc/pgtype/ext/shopspring-numeric"
-	"github.com/jackc/pgtype/pgxtype"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/pgxutil"
@@ -168,30 +167,6 @@ func registerDataTypes(ctx context.Context, conn *pgx.Conn, systemSchema string)
 		Name:  "numeric",
 		OID:   pgtype.NumericOID,
 	})
-
-	// TODO - figure out better way to handle custom types that will not exist on initial load. Or maybe remove custom
-	// types altogether. Currently, the server needs to be restarted after the initial load.
-
-	dataTypeNames := []string{
-		"handler_param",
-		"_handler_param",
-		"handler",
-		"_handler",
-		"get_handler_result_row_param",
-		"_get_handler_result_row_param",
-		"get_handler_result_row",
-		"_get_handler_result_row",
-	}
-
-	for _, typeName := range dataTypeNames {
-		dataType, err := pgxtype.LoadDataType(ctx, conn, conn.ConnInfo(), fmt.Sprintf("%s.%s", QuoteSchema(systemSchema), typeName))
-		// if err != nil {
-		// 	return err
-		// }
-		if err == nil {
-			conn.ConnInfo().RegisterDataType(dataType)
-		}
-	}
 
 	return nil
 }
