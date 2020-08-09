@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"time"
 
 	"github.com/jackc/hannibal/current"
@@ -26,6 +27,11 @@ func Serve(config *Config) {
 		AppPath:        config.AppPath,
 	}
 
+	err := host.Load(context.Background(), filepath.Join(host.AppPath, "current"))
+	if err != nil {
+		log.Error().Err(err).Msg("unable to load app")
+	}
+
 	interruptChan := make(chan os.Signal, 1)
 	signal.Notify(interruptChan, shutdownSignals...)
 	go func() {
@@ -41,7 +47,7 @@ func Serve(config *Config) {
 		}
 	}()
 
-	err := host.ListenAndServe()
+	err = host.ListenAndServe()
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to start")
 	}
