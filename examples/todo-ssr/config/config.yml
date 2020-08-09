@@ -3,4 +3,4 @@ routes:
     func: get_time
     query-params:
       - name: name
-        trim-space: false
+        nullify-empty: true

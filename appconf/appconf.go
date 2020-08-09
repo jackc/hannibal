@@ -22,10 +22,11 @@ type Route struct {
 }
 
 type RequestParam struct {
-	Name      string
-	Type      string
-	TrimSpace *bool `yaml:"trim-space"`
-	Required  bool
+	Name         string
+	Type         string
+	TrimSpace    *bool `yaml:"trim-space"`
+	Required     bool
+	NullifyEmpty bool `yaml:"nullify-empty"`
 }
 
 func (c *Config) Merge(other *Config) {

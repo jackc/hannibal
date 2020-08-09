@@ -124,6 +124,16 @@ func TestRequestParamParse(t *testing.T) {
 			errStr: "missing",
 		},
 		{
+			desc: "text required with empty string and nullify empty",
+			rp: &server.RequestParam{
+				Type:         server.RequestParamTypeText,
+				Required:     true,
+				NullifyEmpty: true,
+			},
+			value:  "",
+			errStr: "missing",
+		},
+		{
 			desc: "int from non-numeric string",
 			rp: &server.RequestParam{
 				Type: server.RequestParamTypeInt,

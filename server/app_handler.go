@@ -60,16 +60,18 @@ const (
 )
 
 type RequestParam struct {
-	Name      string
-	Type      int8
-	TrimSpace bool
-	Required  bool
+	Name         string
+	Type         int8
+	TrimSpace    bool
+	Required     bool
+	NullifyEmpty bool
 }
 
 func requestParamFromAppConfig(acrp *appconf.RequestParam) (*RequestParam, error) {
 	rp := &RequestParam{
-		Name:     acrp.Name,
-		Required: acrp.Required,
+		Name:         acrp.Name,
+		Required:     acrp.Required,
+		NullifyEmpty: acrp.NullifyEmpty,
 	}
 
 	switch acrp.Type {
@@ -99,8 +101,17 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 		}
 	}
 
-	if rp.Required && value == nil {
-		return nil, errors.New("missing")
+	if rp.NullifyEmpty {
+		if value == "" {
+			value = nil
+		}
+	}
+
+	if value == nil {
+		if rp.Required {
+			return nil, errors.New("missing")
+		}
+		return nil, nil
 	}
 
 	switch rp.Type {
