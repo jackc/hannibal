@@ -47,6 +47,8 @@ func Serve(config *Config) {
 		}
 	}()
 
+	log.Info().Str("addr", host.HTTPListenAddr).Msg("Starting HTTP server")
+
 	err = host.ListenAndServe()
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to start")
