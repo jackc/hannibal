@@ -1,12 +1,12 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/jackc/hannibal/appconf"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgtype"
 )
@@ -23,18 +23,35 @@ var allowedOutArgs = []string{
 type PGFuncHandler struct {
 	SQL         string
 	FuncInArgs  []string
-	QueryParams []appconf.RouteParams
+	QueryParams []*RequestParam
 }
 
 func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	errors := make(map[string]string)
+
 	var queryArgs map[string]interface{}
 	if len(h.QueryParams) != 0 {
 		queryArgs = make(map[string]interface{}, len(h.QueryParams))
 		for _, qp := range h.QueryParams {
-			queryArgs[qp.Name] = r.URL.Query().Get(qp.Name)
+			if value, err := qp.Parse(r.URL.Query().Get(qp.Name)); err == nil {
+				queryArgs[qp.Name] = value
+			} else {
+				errors[qp.Name] = err.Error()
+			}
 		}
+	}
+
+	if len(errors) != 0 {
+		response, err := json.Marshal(map[string]interface{}{"errors": errors})
+		if err != nil {
+			panic(err) // cannot happen
+		}
+
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		w.Write(response)
+		return
 	}
 
 	sqlArgs := make([]interface{}, 0, len(h.FuncInArgs))

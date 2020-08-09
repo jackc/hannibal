@@ -18,12 +18,13 @@ type Route struct {
 	Path        string
 	Method      string
 	Func        string
-	QueryParams []RouteParams `yaml:"query_params"`
+	QueryParams []*RequestParam `yaml:"query-params"`
 }
 
-type RouteParams struct {
-	Name string
-	Type string
+type RequestParam struct {
+	Name      string
+	Type      string
+	TrimSpace *bool `yaml:"trim-space"`
 }
 
 func (c *Config) Merge(other *Config) {

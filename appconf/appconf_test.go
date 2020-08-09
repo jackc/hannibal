@@ -13,13 +13,13 @@ func TestNew(t *testing.T) {
 routes:
   - path: /foo/bar
     func: get_bar
-    query_params:
+    query-params:
       - name: foo
       - name: bar
 
   - path: /baz/:id
     func: get_baz
-    query_params:
+    query-params:
       - name: id
         type: int
 `)
