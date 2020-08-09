@@ -107,13 +107,22 @@ func TestRequestParamParse(t *testing.T) {
 		})
 	}
 
-	// Error cases
+	// Failure cases
 	for _, tt := range []struct {
 		desc   string
 		rp     *server.RequestParam
 		value  interface{}
 		errStr string
 	}{
+		{
+			desc: "text required",
+			rp: &server.RequestParam{
+				Type:     server.RequestParamTypeText,
+				Required: true,
+			},
+			value:  nil,
+			errStr: "missing",
+		},
 		{
 			desc: "int from non-numeric string",
 			rp: &server.RequestParam{

@@ -25,6 +25,7 @@ type RequestParam struct {
 	Name      string
 	Type      string
 	TrimSpace *bool `yaml:"trim-space"`
+	Required  bool
 }
 
 func (c *Config) Merge(other *Config) {
