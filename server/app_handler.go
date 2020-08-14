@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,7 +14,7 @@ import (
 	"github.com/jackc/hannibal/db"
 )
 
-func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes []appconf.Route) (http.Handler, error) {
+func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes []appconf.Route, tmpl *template.Template) (http.Handler, error) {
 	router := chi.NewRouter()
 	for _, r := range routes {
 		var proargmodes []string
@@ -42,6 +43,8 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes 
 				return nil, fmt.Errorf("failed to convert request param %s: %v", qp.Name, err)
 			}
 		}
+
+		h.RootTemplate = tmpl
 
 		if r.Method != "" {
 			router.Method(r.Method, r.Path, h)

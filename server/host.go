@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"html/template"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -97,7 +99,12 @@ func (h *Host) Load(ctx context.Context, projectPath string) error {
 		return err
 	}
 
-	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig.Routes)
+	rootTmpl, err := loadTemplates(filepath.Join(projectPath, "template"))
+	if err != nil {
+		return err
+	}
+
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig.Routes, rootTmpl)
 	if err != nil {
 		return err
 	}
@@ -202,7 +209,14 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig.Routes)
+	rootTmpl, err := loadTemplates(filepath.Join(nextPath, "template"))
+	if err != nil {
+		current.Logger(ctx).Error().Caller().Err(err).Send()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig.Routes, rootTmpl)
 	if err != nil {
 		current.Logger(ctx).Error().Caller().Err(err).Send()
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -253,4 +267,36 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 	}
 
 	current.Logger(ctx).Info().Msg("Successful deploy")
+}
+
+func loadTemplates(rootPath string) (*template.Template, error) {
+	rootTmpl := template.New("root")
+
+	walkFunc := func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("failed to walk for %s: %v", path, walkErr)
+		}
+
+		if info.Mode().IsRegular() {
+			tmplSrc, err := ioutil.ReadFile(path)
+			if err != nil {
+				return err
+			}
+
+			tmplName := path[len(rootPath)+1:]
+			_, err = rootTmpl.New(tmplName).Parse(string(tmplSrc))
+			if err != nil {
+				return fmt.Errorf("failed to parse for %s: %v", path, err)
+			}
+		}
+
+		return nil
+	}
+
+	err := filepath.Walk(rootPath, walkFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	return rootTmpl, nil
 }

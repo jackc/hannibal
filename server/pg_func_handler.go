@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
 
@@ -18,12 +19,15 @@ var allowedInArgs = []string{
 var allowedOutArgs = []string{
 	"status",
 	"resp_body",
+	"template",
+	"template_data",
 }
 
 type PGFuncHandler struct {
-	SQL         string
-	FuncInArgs  []string
-	QueryParams []*RequestParam
+	SQL          string
+	FuncInArgs   []string
+	QueryParams  []*RequestParam
+	RootTemplate *template.Template
 }
 
 func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,23 +68,39 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var status pgtype.Int2
 	var respBody []byte
+	var templateName pgtype.Text
+	var templateData map[string]interface{}
 
 	err := db.App(ctx).QueryRow(ctx, h.SQL, sqlArgs...).Scan(
 		&status,
 		&respBody,
+		&templateName,
+		&templateData,
 	)
 	if err != nil {
 		panic(err)
 	}
-
-	w.Header().Add("Content-Type", "application/json")
 
 	if status.Status == pgtype.Present {
 		w.WriteHeader(int(status.Int))
 	}
 
 	if respBody != nil {
+		w.Header().Add("Content-Type", "application/json")
 		w.Write(respBody)
+		return
+	}
+
+	if templateName.Status == pgtype.Present {
+		w.Header().Add("Content-Type", "text/html")
+		tmpl := h.RootTemplate.Lookup(templateName.String)
+		if tmpl == nil {
+			panic("template not found: " + templateName.String)
+		}
+		err := tmpl.Execute(w, templateData)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -117,7 +137,9 @@ func NewPGFuncHandler(name string, proargmodes []string, proargnames []string) (
 
 	if _, hasStatus := outArgMap["status"]; !hasStatus {
 		if _, hasRespBody := outArgMap["resp_body"]; !hasRespBody {
-			return nil, errors.New("missing status and resp_body args")
+			if _, hasTemplate := outArgMap["template"]; !hasTemplate {
+				return nil, errors.New("missing status, resp_body, and template out arguments")
+			}
 		}
 	}
 
