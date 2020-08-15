@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgtype"
@@ -14,6 +15,7 @@ import (
 
 var allowedInArgs = []string{
 	"query_args",
+	"cookie_session",
 }
 
 var allowedOutArgs = []string{
@@ -21,6 +23,7 @@ var allowedOutArgs = []string{
 	"resp_body",
 	"template",
 	"template_data",
+	"cookie_session",
 }
 
 type PGFuncHandler struct {
@@ -28,6 +31,7 @@ type PGFuncHandler struct {
 	FuncInArgs   []string
 	QueryParams  []*RequestParam
 	RootTemplate *template.Template
+	Host         *Host
 }
 
 func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -58,11 +62,19 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Read the cookie session. Ignore any errors and treat as missing.
+	var requestCookieSession []byte
+	if cookie, err := r.Cookie("hannibal-session"); err == nil {
+		h.Host.secureCookie.Decode("hannibal-session", cookie.Value, &requestCookieSession)
+	}
+
 	sqlArgs := make([]interface{}, 0, len(h.FuncInArgs))
 	for _, ia := range h.FuncInArgs {
 		switch ia {
 		case "query_args":
 			sqlArgs = append(sqlArgs, queryArgs)
+		case "cookie_session":
+			sqlArgs = append(sqlArgs, requestCookieSession)
 		}
 	}
 
@@ -70,12 +82,14 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var respBody []byte
 	var templateName pgtype.Text
 	var templateData map[string]interface{}
+	var responseCookieSession []byte
 
 	err := db.App(ctx).QueryRow(ctx, h.SQL, sqlArgs...).Scan(
 		&status,
 		&respBody,
 		&templateName,
 		&templateData,
+		&responseCookieSession,
 	)
 	if err != nil {
 		panic(err)
@@ -89,6 +103,33 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		w.Write(respBody)
 		return
+	}
+
+	if responseCookieSession != nil {
+		encoded, err := h.Host.secureCookie.Encode("hannibal-session", responseCookieSession)
+		if err != nil {
+			panic(err)
+		}
+
+		cookie := &http.Cookie{
+			Name:     "hannibal-session",
+			Value:    encoded,
+			Path:     "/",
+			Secure:   false, // TODO - false in dev mode -- configurable in production
+			HttpOnly: true,
+		}
+		http.SetCookie(w, cookie)
+
+	} else if responseCookieSession != nil {
+		cookie := &http.Cookie{
+			Name:     "hannibal-session",
+			Value:    "",
+			Path:     "/",
+			Secure:   false, // TODO - false in dev mode -- configurable in production
+			HttpOnly: true,
+			Expires:  time.Unix(0, 0),
+		}
+		http.SetCookie(w, cookie)
 	}
 
 	if templateName.Status == pgtype.Present {
@@ -129,6 +170,9 @@ func NewPGFuncHandler(name string, proargmodes []string, proargnames []string) (
 		case "i":
 			inArgMap[proargnames[i]] = struct{}{}
 		case "o":
+			outArgMap[proargnames[i]] = struct{}{}
+		case "b":
+			inArgMap[proargnames[i]] = struct{}{}
 			outArgMap[proargnames[i]] = struct{}{}
 		default:
 			return nil, fmt.Errorf("unknown proargmode: %s", m)

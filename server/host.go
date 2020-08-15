@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gorilla/securecookie"
 	"github.com/jackc/hannibal/appconf"
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
@@ -29,10 +31,16 @@ type Host struct {
 	deployMutex  sync.Mutex
 	installMutex sync.RWMutex
 	appHandler   http.Handler
+
+	secureCookie *securecookie.SecureCookie
 }
 
 func (h *Host) ListenAndServe() error {
 	log := *current.Logger(context.Background())
+
+	cookieHashKey := sha256.Sum256([]byte(current.SecretKeyBase(context.Background()) + "cookie hash key"))
+	cookieBlockKey := sha256.Sum256([]byte(current.SecretKeyBase(context.Background()) + "cookie block key"))
+	h.secureCookie = securecookie.New(cookieHashKey[:], cookieBlockKey[:16])
 
 	r := BaseMux(log)
 
@@ -104,7 +112,7 @@ func (h *Host) Load(ctx context.Context, projectPath string) error {
 		return err
 	}
 
-	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig.Routes, rootTmpl)
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig.Routes, rootTmpl, h)
 	if err != nil {
 		return err
 	}
@@ -216,7 +224,7 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig.Routes, rootTmpl)
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig.Routes, rootTmpl, h)
 	if err != nil {
 		current.Logger(ctx).Error().Caller().Err(err).Send()
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

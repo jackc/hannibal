@@ -20,6 +20,8 @@ var developCmd = &cobra.Command{
 
 		logger := current.Logger(context.Background())
 
+		current.SetSecretKeyBase("development-mode-secret-key-base")
+
 		err := db.ConnectAll(context.Background())
 		if err != nil {
 			logger.Fatal().Err(err).Msg("failed to connect to database")
