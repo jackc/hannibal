@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/hannibal/db"
 )
 
-func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes []appconf.Route, tmpl *template.Template, host *Host) (http.Handler, error) {
+func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes []appconf.Route, tmpl *template.Template, host *Host, publicPath string) (http.Handler, error) {
 	router := chi.NewRouter()
 	for _, r := range routes {
 		var proargmodes []string
@@ -53,6 +53,8 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes 
 			router.Handle(r.Path, h)
 		}
 	}
+
+	router.NotFound(NewPublicFileHandler(publicPath).ServeHTTP)
 
 	return router, nil
 }
