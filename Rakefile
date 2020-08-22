@@ -22,7 +22,7 @@ file "embed/statik/statik.go" => FileList["embed/root/**/*"] do
   sh "statik -src embed/root -dest embed"
 end
 
-file "tmp/development/bin/hannibal" => ["embed/statik/statik.go", *FileList["**/*.go"]] do |t|
+file "tmp/development/bin/hannibal" => ["embed/statik/statik.go", *FileList["**/*.go"]].reject { |f| f =~ /_test.go$/} do |t|
   sh "go build -o tmp/development/bin/hannibal"
 end
 
