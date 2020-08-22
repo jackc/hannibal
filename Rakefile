@@ -45,7 +45,7 @@ end
 
 desc "Run tests"
 task test: ["tmp/test/bin/hannibal"]  do
-  sh "go test ./... -count=1"
+  sh "go test ./..."
 end
 
 task default: :test
