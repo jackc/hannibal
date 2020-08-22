@@ -1,19 +1,135 @@
 package main_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/publicsuffix"
 )
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	if dbManager.conn != nil && dbManager.dbTemplateCreated {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		templateDBName := "hannibal_test_template"
+		_, err := dbManager.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s", templateDBName))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to remove template database %s: %v", templateDBName, err)
+		}
+	}
+
+	os.Exit(exitCode)
+}
+
+type dbManagerT struct {
+	mutex sync.Mutex
+	conn  *pgx.Conn
+
+	dbCount           int64
+	dbTemplateCreated bool
+}
+
+var dbManager dbManagerT
+
+// ensurePool ensures a management connection exists. mutex must already be held.
+func (dbm *dbManagerT) ensureConn(t *testing.T) {
+	if dbm.conn != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var err error
+	dbm.conn, err = pgx.Connect(ctx, "")
+	require.NoError(t, err)
+}
+
+func (dbm *dbManagerT) createInitializedDB(t *testing.T) string {
+	dbm.mutex.Lock()
+	defer dbm.mutex.Unlock()
+	dbm.ensureConn(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	templateDBName := "hannibal_test_template"
+	if !dbm.dbTemplateCreated {
+		_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s", templateDBName))
+		require.NoError(t, err)
+
+		_, err = dbm.conn.Exec(ctx, fmt.Sprintf("create database %s", templateDBName))
+		require.NoError(t, err)
+
+		execHannibal(t,
+			"db", "init",
+			"--database-dsn", fmt.Sprintf("database=%s", templateDBName),
+		)
+
+		dbm.dbTemplateCreated = true
+	}
+
+	dbm.dbCount += 1
+	dbName := fmt.Sprintf("hannibal_test_%d", dbm.dbCount)
+
+	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("create database %s with template = %s", dbName, templateDBName))
+	require.NoError(t, err)
+
+	return dbName
+}
+
+func (dbm *dbManagerT) createEmptyDB(t *testing.T) string {
+	dbm.mutex.Lock()
+	defer dbm.mutex.Unlock()
+	dbm.ensureConn(t)
+
+	dbm.dbCount += 1
+	dbName := fmt.Sprintf("hannibal_test_%d", dbm.dbCount)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("create database %s", dbName))
+	require.NoError(t, err)
+
+	return dbName
+}
+
+func (dbm *dbManagerT) dropDB(t *testing.T, dbName string) {
+	dbm.mutex.Lock()
+	defer dbm.mutex.Unlock()
+	dbm.ensureConn(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database %s", dbName))
+	require.NoError(t, err)
+}
+
+func execHannibal(t *testing.T, args ...string) string {
+	cmdPath := filepath.Join("tmp", "test", "hannibal")
+
+	cmd := exec.Command(cmdPath, args...)
+	output, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "failed with output:\n%v", string(output))
+	return string(output)
+}
 
 type hannibalServer struct {
 	process *os.Process
@@ -118,11 +234,14 @@ func readResponseBody(t *testing.T, r *http.Response) []byte {
 }
 
 func TestServePublicFiles(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
 	hs := startHannibal(t,
 		"develop",
 		map[string]string{
 			"--project-path": filepath.Join("testdata", "testproject"),
-			"--database-dsn": "database=hannibal_test_testapp",
+			"--database-dsn": fmt.Sprintf("database=%s", testDB),
 		},
 	)
 	defer stopHannibal(t, hs)
