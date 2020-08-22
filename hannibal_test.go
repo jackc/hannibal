@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -15,22 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/publicsuffix"
 )
-
-func TestMain(m *testing.M) {
-	err := os.MkdirAll("tmp/test", 0755)
-	if err != nil {
-		fmt.Println("failed to create test directory:", err)
-		os.Exit(1)
-	}
-
-	err = exec.Command("go", "build", "-o", "tmp/test/hannibal").Run()
-	if err != nil {
-		fmt.Println("Failed to build hannibal binary:", err)
-		os.Exit(1)
-	}
-
-	os.Exit(m.Run())
-}
 
 type hannibalServer struct {
 	process *os.Process
