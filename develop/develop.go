@@ -33,6 +33,12 @@ func Develop(config *Config) {
 		log.Fatal().Err(err).Msg("failed to watch sql directory")
 	}
 
+	templatePath := filepath.Join(config.ProjectPath, "template")
+	err = watcher.Add(templatePath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to watch template directory")
+	}
+
 	configPath := filepath.Join(config.ProjectPath, "config")
 	err = watcher.Add(configPath)
 	if err != nil {

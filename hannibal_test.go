@@ -11,11 +11,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/otiai10/copy"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/publicsuffix"
 )
@@ -330,6 +333,132 @@ func readResponseBody(t *testing.T, r *http.Response) []byte {
 	require.NoError(t, err)
 
 	return data
+}
+
+func TestDevelopAutoLoads(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+	projectPath := filepath.Join(appDir, "project")
+	err := copy.Copy(filepath.Join("testdata", "testproject"), projectPath)
+	require.NoError(t, err)
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		projectPath: projectPath,
+	}
+
+	hi.develop(t)
+	defer hi.stop(t)
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	response := browser.get(t, `/hello?name=Jack`)
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Hello, Jack!")
+}
+
+func TestDevelopAutoReloadsOnSQLChanges(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+	projectPath := filepath.Join(appDir, "project")
+	err := copy.Copy(filepath.Join("testdata", "testproject"), projectPath)
+	require.NoError(t, err)
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		projectPath: projectPath,
+	}
+
+	hi.develop(t)
+	defer hi.stop(t)
+
+	newSQL := `create function hello(
+		out template text,
+		out template_data jsonb
+	)
+	language plpgsql as $$
+	begin
+		select
+			'hello.html',
+			jsonb_build_object(
+				'name', 'Alice'
+			)
+		into template, template_data;
+	end;
+	$$;
+	`
+
+	err = ioutil.WriteFile(filepath.Join(projectPath, "sql", "hello.sql"), []byte(newSQL), 0644)
+	require.NoError(t, err)
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	var responseBody string
+	// Allow a little time for the changed file to be detected.
+	for i := 0; i < 20; i++ {
+		response := browser.get(t, `/hello?name=Jack`)
+		require.EqualValues(t, http.StatusOK, response.StatusCode)
+		responseBody = string(readResponseBody(t, response))
+		if strings.Contains(responseBody, "Hello, Alice!") {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	require.Contains(t, responseBody, "Hello, Alice!")
+}
+
+func TestDevelopAutoReloadsOnTemplateChanges(t *testing.T) {
+
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+	projectPath := filepath.Join(appDir, "project")
+	err := copy.Copy(filepath.Join("testdata", "testproject"), projectPath)
+	require.NoError(t, err)
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		projectPath: projectPath,
+	}
+
+	hi.develop(t)
+	defer hi.stop(t)
+
+	newTemplate := `<html>
+	<body>
+		<p>
+			Hello, Alice!
+		</p>
+	</body>
+	</html>
+	`
+
+	err = ioutil.WriteFile(filepath.Join(projectPath, "template", "hello.html"), []byte(newTemplate), 0644)
+	require.NoError(t, err)
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	var responseBody string
+	// Allow a little time for the changed file to be detected.
+	for i := 0; i < 20; i++ {
+		response := browser.get(t, `/hello?name=Jack`)
+		require.EqualValues(t, http.StatusOK, response.StatusCode)
+		responseBody = string(readResponseBody(t, response))
+		if strings.Contains(responseBody, "Hello, Alice!") {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	require.Contains(t, responseBody, "Hello, Alice!")
 }
 
 func TestDevelopPublicFiles(t *testing.T) {

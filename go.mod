@@ -13,6 +13,7 @@ require (
 	github.com/jackc/pgxutil v0.0.0-20200703204206-37866e09a15b
 	github.com/jackc/tern v1.12.2-0.20200711223825-7cd897735b6f
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/otiai10/copy v1.2.0
 	github.com/rakyll/statik v0.1.7
 	github.com/rs/zerolog v1.19.0
 	github.com/spf13/cobra v1.0.0
