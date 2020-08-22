@@ -34,12 +34,12 @@ var systemCreateAPIKeyCmd = &cobra.Command{
 			logger.Fatal().Err(err).Str("username", username).Msg("failed to find user")
 		}
 
-		id, apiKey, err := system.CreateAPIKey(ctx, userID)
+		_, apiKey, err := system.CreateAPIKey(ctx, userID)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("failed to create API key")
 		}
 
-		logger.Info().Int32("id", id).Str("apiKey", apiKey).Msg("API key created")
+		fmt.Println(apiKey)
 	},
 }
 

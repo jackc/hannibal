@@ -34,12 +34,12 @@ var systemCreateDeployKeyCmd = &cobra.Command{
 			logger.Fatal().Err(err).Str("username", username).Msg("failed to find user")
 		}
 
-		id, privateKey, err := system.CreateDeployKey(ctx, userID)
+		_, privateKey, err := system.CreateDeployKey(ctx, userID)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("failed to create deploy key")
 		}
 
-		logger.Info().Int32("id", id).Str("privateKey", privateKey).Msg("Deploy key created")
+		fmt.Println(privateKey)
 	},
 }
 

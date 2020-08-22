@@ -23,12 +23,10 @@ var systemCreateUserCmd = &cobra.Command{
 		}
 
 		username, _ := cmd.Flags().GetString("username")
-		id, err := system.CreateUser(ctx, username)
+		_, err = system.CreateUser(ctx, username)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("failed to create user")
 		}
-
-		logger.Info().Int32("id", id).Str("username", username).Msg("user created")
 	},
 }
 

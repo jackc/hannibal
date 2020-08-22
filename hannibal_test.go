@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -123,7 +124,7 @@ func (dbm *dbManagerT) dropDB(t *testing.T, dbName string) {
 }
 
 func execHannibal(t *testing.T, args ...string) string {
-	cmdPath := filepath.Join("tmp", "test", "hannibal")
+	cmdPath := filepath.Join("tmp", "test", "bin", "hannibal")
 
 	cmd := exec.Command(cmdPath, args...)
 	output, err := cmd.CombinedOutput()
@@ -131,31 +132,91 @@ func execHannibal(t *testing.T, args ...string) string {
 	return string(output)
 }
 
-type hannibalServer struct {
-	process *os.Process
-	addr    string
+type hannibalInstance struct {
+	dbName      string
+	databaseDSN string
+
+	httpProcess *hannibalProcess
+	httpAddr    string
+
+	appPath     string
+	projectPath string
 }
 
-func startHannibal(t *testing.T, command string, args map[string]string) *hannibalServer {
-	if _, ok := args["http-service-address"]; !ok {
-		args["--http-service-address"] = "127.0.0.1:5000"
+func (hi *hannibalInstance) systemCreateUser(t *testing.T, username string) {
+	execHannibal(t,
+		"system", "create-user",
+		"--database-dsn", hi.databaseDSN,
+		"-u", username,
+	)
+}
+
+func (hi *hannibalInstance) systemCreateAPIKey(t *testing.T, username string) string {
+	output := execHannibal(t,
+		"system", "create-api-key",
+		"--database-dsn", hi.databaseDSN,
+		"-u", username,
+	)
+
+	match := regexp.MustCompile(`[0-9a-f]+`).FindString(output)
+	require.NotEmpty(t, match)
+	return match
+}
+
+func (hi *hannibalInstance) systemCreateDeployKey(t *testing.T, username string) string {
+	output := execHannibal(t,
+		"system", "create-deploy-key",
+		"--database-dsn", hi.databaseDSN,
+		"-u", username,
+	)
+
+	match := regexp.MustCompile(`[0-9a-f]+`).FindString(output)
+	require.NotEmpty(t, match)
+	return match
+}
+
+func (hi *hannibalInstance) develop(t *testing.T) {
+	if hi.httpProcess != nil {
+		t.Fatal("process already started")
 	}
 
-	cmdPath := filepath.Join("tmp", "test", "hannibal")
-	argv := []string{cmdPath, command}
-	for k, v := range args {
-		argv = append(argv, k, v)
-	}
-	procAttr := &os.ProcAttr{
-		Files: []*os.File{nil, os.Stdout, os.Stderr},
+	if hi.httpAddr == "" {
+		hi.httpAddr = "127.0.0.1:5000"
 	}
 
-	process, err := os.StartProcess(cmdPath, argv, procAttr)
-	require.NoError(t, err)
+	hi.httpProcess = spawnHannibal(t,
+		"develop",
+		"--http-service-address", hi.httpAddr,
+		"--database-dsn", hi.databaseDSN,
+		"--project-path", hi.projectPath,
+	)
 
+	waitForListeningTCPServer(t, hi.httpAddr)
+}
+
+func (hi *hannibalInstance) serve(t *testing.T) {
+	if hi.httpProcess != nil {
+		t.Fatal("process already started")
+	}
+
+	if hi.httpAddr == "" {
+		hi.httpAddr = "127.0.0.1:5000"
+	}
+
+	hi.httpProcess = spawnHannibal(t,
+		"serve",
+		"--http-service-address", hi.httpAddr,
+		"--database-dsn", hi.databaseDSN,
+		"--app-path", hi.appPath,
+	)
+
+	waitForListeningTCPServer(t, hi.httpAddr)
+}
+
+func waitForListeningTCPServer(t *testing.T, addr string) {
 	serverActive := false
 	for i := 0; i < 100; i++ {
-		conn, err := net.DialTimeout("tcp", args["--http-service-address"], time.Second)
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
 		if err == nil {
 			err := conn.Close()
 			require.NoError(t, err)
@@ -165,23 +226,43 @@ func startHannibal(t *testing.T, command string, args map[string]string) *hannib
 		time.Sleep(50 * time.Millisecond)
 	}
 	require.True(t, serverActive, "hannibal server appeared to start but is not listening")
-
-	hs := &hannibalServer{
-		process: process,
-		addr:    args["--http-service-address"],
-	}
-	return hs
 }
 
-func stopHannibal(t *testing.T, hs *hannibalServer) {
-	err := hs.process.Kill()
+func (hi *hannibalInstance) deploy(t *testing.T, apiKey, deployKey string) {
+	if hi.httpProcess == nil || hi.httpAddr == "" {
+		t.Fatal("no http process to deploy to")
+	}
+
+	execHannibal(t, "deploy",
+		fmt.Sprintf(`http://%s/`, hi.httpAddr),
+		"--project-path", hi.projectPath,
+		"--api-key", apiKey,
+		"--deploy-key", deployKey,
+	)
+}
+
+func (hi *hannibalInstance) stop(t *testing.T) {
+	if hi.httpProcess == nil {
+		t.Fatal("no process to stop")
+	}
+
+	hi.httpProcess.stop(t)
+	hi.httpProcess = nil
+}
+
+type hannibalProcess struct {
+	process *os.Process
+}
+
+func (hp *hannibalProcess) stop(t *testing.T) {
+	err := hp.process.Kill()
 	require.NoError(t, err)
 
 	waitDone := make(chan bool)
 	waitErr := make(chan error)
 
 	go func() {
-		_, err := hs.process.Wait()
+		_, err := hp.process.Wait()
 		if err != nil {
 			waitErr <- err
 		} else {
@@ -196,6 +277,24 @@ func stopHannibal(t *testing.T, hs *hannibalServer) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Timeout waiting for hannibal to terminate")
 	}
+}
+
+func spawnHannibal(t *testing.T, args ...string) *hannibalProcess {
+	cmdPath := filepath.Join("tmp", "test", "bin", "hannibal")
+	argv := []string{cmdPath}
+	argv = append(argv, args...)
+	procAttr := &os.ProcAttr{
+		Files: []*os.File{nil, os.Stdout, os.Stderr},
+	}
+
+	process, err := os.StartProcess(cmdPath, argv, procAttr)
+	require.NoError(t, err)
+
+	hp := &hannibalProcess{
+		process: process,
+	}
+
+	return hp
 }
 
 type browser struct {
@@ -233,20 +332,51 @@ func readResponseBody(t *testing.T, r *http.Response) []byte {
 	return data
 }
 
+func TestDevelopPublicFiles(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.develop(t)
+	defer hi.stop(t)
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	response := browser.get(t, "/hello.html")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := readResponseBody(t, response)
+	fileBody, err := ioutil.ReadFile(filepath.Join("testdata", "testproject", "public", "hello.html"))
+	require.NoError(t, err)
+	require.Equal(t, fileBody, responseBody)
+}
+
 func TestServePublicFiles(t *testing.T) {
 	testDB := dbManager.createInitializedDB(t)
 	defer dbManager.dropDB(t, testDB)
 
-	hs := startHannibal(t,
-		"develop",
-		map[string]string{
-			"--project-path": filepath.Join("testdata", "testproject"),
-			"--database-dsn": fmt.Sprintf("database=%s", testDB),
-		},
-	)
-	defer stopHannibal(t, hs)
+	appDir := t.TempDir()
 
-	browser := newBrowser(t, hs.addr)
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+	defer hi.stop(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	browser := newBrowser(t, hi.httpAddr)
 
 	response := browser.get(t, "/hello.html")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
