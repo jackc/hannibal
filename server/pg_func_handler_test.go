@@ -23,7 +23,7 @@ func TestNewPGFuncHandler(t *testing.T) {
 			name:        "get_foo",
 			proargmodes: []string{"i", "o"},
 			proargnames: []string{"query_args", "resp_body"},
-			sql:         "select null as status, resp_body from get_foo(query_args => $1)",
+			sql:         "select null as status, resp_body, null as template, null as template_data, null as cookie_session from get_foo(query_args => $1)",
 			inArgs:      []string{"query_args"},
 		},
 		{
@@ -31,7 +31,7 @@ func TestNewPGFuncHandler(t *testing.T) {
 			name:        "get_foo",
 			proargmodes: []string{"i", "o", "o"},
 			proargnames: []string{"query_args", "resp_body", "status"},
-			sql:         "select status, resp_body from get_foo(query_args => $1)",
+			sql:         "select status, resp_body, null as template, null as template_data, null as cookie_session from get_foo(query_args => $1)",
 			inArgs:      []string{"query_args"},
 		},
 	} {
@@ -106,7 +106,7 @@ func TestNewPGFuncHandler(t *testing.T) {
 			name:        "foo",
 			proargmodes: []string{"i"},
 			proargnames: []string{"query_args"},
-			errString:   "missing status and resp_body args",
+			errString:   "missing status, resp_body, and template out arguments",
 		},
 		{
 			desc:        "unknown proargmode",
