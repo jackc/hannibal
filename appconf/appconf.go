@@ -15,10 +15,10 @@ type Config struct {
 }
 
 type Route struct {
-	Path        string
-	Method      string
-	Func        string
-	QueryParams []*RequestParam `yaml:"query-params"`
+	Path   string
+	Method string
+	Func   string
+	Params []*RequestParam `yaml:"params"`
 }
 
 type RequestParam struct {

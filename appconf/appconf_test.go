@@ -13,13 +13,13 @@ func TestNew(t *testing.T) {
 routes:
   - path: /foo/bar
     func: get_bar
-    query-params:
+    params:
       - name: foo
       - name: bar
 
   - path: /baz/:id
     func: get_baz
-    query-params:
+    params:
       - name: id
         type: int
 `)
@@ -33,13 +33,13 @@ routes:
 		r := config.Routes[0]
 		assert.Equal(t, "/foo/bar", r.Path)
 		assert.Equal(t, "get_bar", r.Func)
-		require.Len(t, r.QueryParams, 2)
+		require.Len(t, r.Params, 2)
 		{
-			p := r.QueryParams[0]
+			p := r.Params[0]
 			assert.Equal(t, "foo", p.Name)
 		}
 		{
-			p := r.QueryParams[1]
+			p := r.Params[1]
 			assert.Equal(t, "bar", p.Name)
 		}
 	}
@@ -47,9 +47,9 @@ routes:
 		r := config.Routes[1]
 		assert.Equal(t, "/baz/:id", r.Path)
 		assert.Equal(t, "get_baz", r.Func)
-		require.Len(t, r.QueryParams, 1)
+		require.Len(t, r.Params, 1)
 		{
-			p := r.QueryParams[0]
+			p := r.Params[0]
 			assert.Equal(t, "id", p.Name)
 			assert.Equal(t, "int", p.Type)
 		}
@@ -72,13 +72,13 @@ func TestConfigSingleFile(t *testing.T) {
 		r := config.Routes[0]
 		assert.Equal(t, "/foo/bar", r.Path)
 		assert.Equal(t, "get_bar", r.Func)
-		require.Len(t, r.QueryParams, 2)
+		require.Len(t, r.Params, 2)
 		{
-			p := r.QueryParams[0]
+			p := r.Params[0]
 			assert.Equal(t, "foo", p.Name)
 		}
 		{
-			p := r.QueryParams[1]
+			p := r.Params[1]
 			assert.Equal(t, "bar", p.Name)
 		}
 	}
@@ -86,9 +86,9 @@ func TestConfigSingleFile(t *testing.T) {
 		r := config.Routes[1]
 		assert.Equal(t, "/baz/:id", r.Path)
 		assert.Equal(t, "get_baz", r.Func)
-		require.Len(t, r.QueryParams, 1)
+		require.Len(t, r.Params, 1)
 		{
-			p := r.QueryParams[0]
+			p := r.Params[0]
 			assert.Equal(t, "id", p.Name)
 			assert.Equal(t, "int", p.Type)
 		}

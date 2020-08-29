@@ -1,5 +1,5 @@
 create function hello(
-  query_args jsonb,
+  args jsonb,
   inout cookie_session jsonb,
   out template text,
   out template_data jsonb
@@ -15,7 +15,7 @@ begin
     'hello.html',
     jsonb_build_object(
       'time', now(),
-      'name', query_args ->> 'name',
+      'name', args ->> 'name',
       'visitCount', cookie_session -> 'visitCount'
     )
   into template, template_data;

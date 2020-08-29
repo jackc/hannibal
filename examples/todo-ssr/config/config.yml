@@ -1,11 +1,11 @@
 routes:
   - path: /get_time
     func: get_time
-    query-params:
+    params:
       - name: name
         nullify-empty: true
   - path: /hello
     func: hello
-    query-params:
+    params:
       - name: name
         nullify-empty: true

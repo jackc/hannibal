@@ -35,10 +35,10 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes 
 			return nil, fmt.Errorf("failed to build handler for function %s: %v", r.Func, err)
 		}
 
-		h.QueryParams = make([]*RequestParam, len(r.QueryParams))
-		for i, qp := range r.QueryParams {
+		h.Params = make([]*RequestParam, len(r.Params))
+		for i, qp := range r.Params {
 			var err error
-			h.QueryParams[i], err = requestParamFromAppConfig(qp)
+			h.Params[i], err = requestParamFromAppConfig(qp)
 			if err != nil {
 				return nil, fmt.Errorf("failed to convert request param %s: %v", qp.Name, err)
 			}

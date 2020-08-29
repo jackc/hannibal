@@ -14,7 +14,7 @@ import (
 )
 
 var allowedInArgs = []string{
-	"query_args",
+	"args",
 	"cookie_session",
 }
 
@@ -29,21 +29,44 @@ var allowedOutArgs = []string{
 type PGFuncHandler struct {
 	SQL          string
 	FuncInArgs   []string
-	QueryParams  []*RequestParam
+	Params       []*RequestParam
 	RootTemplate *template.Template
 	Host         *Host
+}
+
+func extractRawArgs(r *http.Request) (map[string]interface{}, error) {
+	rawArgs := make(map[string]interface{})
+	for key, values := range r.URL.Query() {
+		rawArgs[key] = values[0]
+	}
+
+	if r.Header.Get("Content-Type") == "application/json" {
+		decoder := json.NewDecoder(r.Body)
+		decoder.UseNumber()
+		err := decoder.Decode(&rawArgs)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return rawArgs, nil
 }
 
 func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	rawArgs, err := extractRawArgs(r)
+	if err != nil {
+		panic(err)
+	}
+
 	errors := make(map[string]string)
 
 	var queryArgs map[string]interface{}
-	if len(h.QueryParams) != 0 {
-		queryArgs = make(map[string]interface{}, len(h.QueryParams))
-		for _, qp := range h.QueryParams {
-			if value, err := qp.Parse(r.URL.Query().Get(qp.Name)); err == nil {
+	if len(h.Params) != 0 {
+		queryArgs = make(map[string]interface{}, len(h.Params))
+		for _, qp := range h.Params {
+			if value, err := qp.Parse(rawArgs[qp.Name]); err == nil {
 				queryArgs[qp.Name] = value
 			} else {
 				errors[qp.Name] = err.Error()
@@ -71,7 +94,7 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sqlArgs := make([]interface{}, 0, len(h.FuncInArgs))
 	for _, ia := range h.FuncInArgs {
 		switch ia {
-		case "query_args":
+		case "args":
 			sqlArgs = append(sqlArgs, queryArgs)
 		case "cookie_session":
 			sqlArgs = append(sqlArgs, requestCookieSession)
@@ -84,7 +107,7 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var templateData map[string]interface{}
 	var responseCookieSession []byte
 
-	err := db.App(ctx).QueryRow(ctx, h.SQL, sqlArgs...).Scan(
+	err = db.App(ctx).QueryRow(ctx, h.SQL, sqlArgs...).Scan(
 		&status,
 		&respBody,
 		&templateName,

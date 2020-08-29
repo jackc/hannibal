@@ -1,6 +1,11 @@
 routes:
   - path: /hello
     func: hello
-    query-params:
+    params:
+      - name: name
+        nullify-empty: true
+  - path: /api/hello
+    func: api_hello
+    params:
       - name: name
         nullify-empty: true

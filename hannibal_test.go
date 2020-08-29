@@ -1,7 +1,9 @@
 package main_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -325,6 +327,31 @@ func (b *browser) get(t *testing.T, queryPath string) *http.Response {
 	return response
 }
 
+type apiClient struct {
+	serverAddr string
+	client     *http.Client
+}
+
+func newAPIClient(t *testing.T, serverAddr string) *apiClient {
+	client := &http.Client{}
+	return &apiClient{
+		serverAddr: serverAddr,
+		client:     client,
+	}
+}
+
+func (c *apiClient) get(t *testing.T, queryPath string) *http.Response {
+	response, err := c.client.Get(fmt.Sprintf(`http://%s%s`, c.serverAddr, queryPath))
+	require.NoError(t, err)
+	return response
+}
+
+func (c *apiClient) post(t *testing.T, queryPath string, contentType string, body []byte) *http.Response {
+	response, err := c.client.Post(fmt.Sprintf(`http://%s%s`, c.serverAddr, queryPath), contentType, bytes.NewReader(body))
+	require.NoError(t, err)
+	return response
+}
+
 func readResponseBody(t *testing.T, r *http.Response) []byte {
 	data, err := ioutil.ReadAll(r.Body)
 	require.NoError(t, err)
@@ -542,6 +569,38 @@ func TestQueryArgs(t *testing.T) {
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
 	assert.Contains(t, responseBody, "Hello, Jack")
+}
+
+func TestJSONBodyArgs(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+	defer hi.stop(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	apiClient := newAPIClient(t, hi.httpAddr)
+
+	response := apiClient.post(t, "/api/hello", "application/json", []byte(`{"name": "Jack"}`))
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
+	var responseData map[string]interface{}
+	err := json.Unmarshal(readResponseBody(t, response), &responseData)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"name": "Jack"}, responseData)
 }
 
 func TestCookieSession(t *testing.T) {
