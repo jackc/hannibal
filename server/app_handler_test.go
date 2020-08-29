@@ -99,6 +99,25 @@ func TestRequestParamParse(t *testing.T) {
 			value:  float64(123),
 			result: int64(123),
 		},
+		{
+			desc: "array from untyped array",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeArray,
+			},
+			value:  []interface{}{"foo"},
+			result: []interface{}{"foo"},
+		},
+		{
+			desc: "array from typed array",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeArray,
+				ArrayElement: &server.RequestParam{
+					Type: server.RequestParamTypeInt,
+				},
+			},
+			value:  []interface{}{"42"},
+			result: []interface{}{int32(42)},
+		},
 	} {
 		t.Run(tt.desc, func(t *testing.T) {
 			result, err := tt.rp.Parse(tt.value)

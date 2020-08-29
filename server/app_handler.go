@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -71,11 +72,13 @@ const (
 	RequestParamTypeText = iota + 1
 	RequestParamTypeInt
 	RequestParamTypeBigint
+	RequestParamTypeArray
 )
 
 type RequestParam struct {
 	Name         string
 	Type         int8
+	ArrayElement *RequestParam
 	TrimSpace    bool
 	Required     bool
 	NullifyEmpty bool
@@ -95,6 +98,8 @@ func requestParamFromAppConfig(acrp *appconf.RequestParam) (*RequestParam, error
 		rp.Type = RequestParamTypeInt
 	case "bigint", "int8":
 		rp.Type = RequestParamTypeBigint
+	case "array":
+		rp.Type = RequestParamTypeArray
 	default:
 		return nil, fmt.Errorf("param %s has unknown type: %s", acrp.Name, acrp.Type)
 	}
@@ -105,7 +110,33 @@ func requestParamFromAppConfig(acrp *appconf.RequestParam) (*RequestParam, error
 		rp.TrimSpace = *acrp.TrimSpace
 	}
 
+	if acrp.ArrayElement != nil {
+		var err error
+		rp.ArrayElement, err = requestParamFromAppConfig(acrp.ArrayElement)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return rp, nil
+}
+
+type arrayElementError struct {
+	Index int
+	Err   error
+}
+
+type arrayElementErrors []arrayElementError
+
+func (e arrayElementErrors) Error() string {
+	sb := &strings.Builder{}
+	for i, ee := range e {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		fmt.Fprintf(sb, "Element %d: %v", ee.Index, ee.Err)
+	}
+	return sb.String()
 }
 
 func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
@@ -138,7 +169,12 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 			s = fmt.Sprint(value)
 		}
 		return s, nil
+
 	case RequestParamTypeInt:
+		if jn, ok := value.(json.Number); ok {
+			value = string(jn)
+		}
+
 		var num int32
 		switch value := value.(type) {
 		case string:
@@ -163,7 +199,12 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 			return nil, fmt.Errorf("%s: cannot convert %v to int", rp.Name, value)
 		}
 		return num, nil
+
 	case RequestParamTypeBigint:
+		if jn, ok := value.(json.Number); ok {
+			value = string(jn)
+		}
+
 		var num int64
 		switch value := value.(type) {
 		case string:
@@ -182,12 +223,37 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 		case float64:
 			num = int64(value)
 			if float64(num) != value {
-				return nil, fmt.Errorf("%s: cannot convert %v to int", rp.Name, value)
+				return nil, fmt.Errorf("%s: cannot convert %v to bigint", rp.Name, value)
 			}
 		default:
-			return nil, fmt.Errorf("%s: cannot convert %v to int", rp.Name, value)
+			return nil, fmt.Errorf("%s: cannot convert %v to bigint", rp.Name, value)
 		}
 		return num, nil
+
+	case RequestParamTypeArray:
+		switch value := value.(type) {
+		case []interface{}:
+			if rp.ArrayElement != nil {
+				parsedArray := make([]interface{}, len(value))
+				var errors arrayElementErrors
+				for i := range parsedArray {
+					var err error
+					parsedArray[i], err = rp.ArrayElement.Parse(value[i])
+					if err != nil {
+						errors = append(errors, arrayElementError{Index: i, Err: err})
+					}
+				}
+				if errors != nil {
+					return parsedArray, errors
+				}
+				return parsedArray, nil
+			} else {
+				return value, nil
+			}
+		default:
+			return nil, fmt.Errorf("%s: cannot convert %v to array", rp.Name, value)
+		}
+
 	default:
 		return nil, fmt.Errorf("unknown param type %v", rp.Type)
 	}

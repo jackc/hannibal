@@ -630,6 +630,49 @@ func TestJSONBodyArgs(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{"name": "Jack"}, responseData)
 }
 
+func TestJSONArrayAndObjectArgs(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+	defer hi.stop(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	apiClient := newAPIClient(t, hi.httpAddr)
+
+	requestData := map[string]interface{}{
+		"untypedArray": []interface{}{"foo", float64(42)},
+		"typedArray":   []interface{}{"1", float64(7777)},
+	}
+	expectedResult := map[string]interface{}{
+		"untypedArray": []interface{}{"foo", float64(42)},
+		"typedArray":   []interface{}{float64(1), float64(7777)},
+	}
+	requestBody, err := json.Marshal(requestData)
+	require.NoError(t, err)
+
+	response := apiClient.post(t, "/api/arrays_and_objects", "application/json", requestBody)
+	assert.EqualValues(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
+	var responseData map[string]interface{}
+	err = json.Unmarshal(readResponseBody(t, response), &responseData)
+	require.NoError(t, err)
+	assert.Equal(t, expectedResult, responseData)
+}
+
 func TestCookieSession(t *testing.T) {
 	testDB := dbManager.createInitializedDB(t)
 	defer dbManager.dropDB(t, testDB)

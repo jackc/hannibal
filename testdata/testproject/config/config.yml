@@ -9,3 +9,12 @@ routes:
     params:
       - name: name
         nullify-empty: true
+  - post: /api/arrays_and_objects
+    func: api_arrays_and_objects
+    params:
+      - name: untypedArray
+        type: array
+      - name: typedArray
+        type: array
+        array-element:
+          type: int
