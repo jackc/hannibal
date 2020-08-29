@@ -15,10 +15,14 @@ type Config struct {
 }
 
 type Route struct {
-	Path   string
-	Method string
-	Func   string
-	Params []*RequestParam `yaml:"params"`
+	GetPath    string `yaml:"get"`
+	PostPath   string `yaml:"post"`
+	PutPath    string `yaml:"put"`
+	PatchPath  string `yaml:"patch"`
+	DeletePath string `yaml:"delete"`
+	Path       string
+	Func       string
+	Params     []*RequestParam `yaml:"params"`
 }
 
 type RequestParam struct {

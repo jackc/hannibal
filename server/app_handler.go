@@ -47,8 +47,16 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes 
 		h.RootTemplate = tmpl
 		h.Host = host
 
-		if r.Method != "" {
-			router.Method(r.Method, r.Path, h)
+		if r.GetPath != "" {
+			router.Method("GET", r.GetPath, h)
+		} else if r.PostPath != "" {
+			router.Method("POST", r.PostPath, h)
+		} else if r.PutPath != "" {
+			router.Method("POST", r.PutPath, h)
+		} else if r.PatchPath != "" {
+			router.Method("PATCH", r.PatchPath, h)
+		} else if r.DeletePath != "" {
+			router.Method("DELETE", r.DeletePath, h)
 		} else {
 			router.Handle(r.Path, h)
 		}
