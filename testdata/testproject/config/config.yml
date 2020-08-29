@@ -5,6 +5,7 @@ routes:
       - name: name
         nullify-empty: true
   - path: /api/hello
+    method: POST
     func: api_hello
     params:
       - name: name

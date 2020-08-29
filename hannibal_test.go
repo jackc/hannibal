@@ -571,6 +571,33 @@ func TestQueryArgs(t *testing.T) {
 	assert.Contains(t, responseBody, "Hello, Jack")
 }
 
+func TestMethodNotAllowed(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+	defer hi.stop(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	apiClient := newAPIClient(t, hi.httpAddr)
+
+	response := apiClient.get(t, "/api/hello")
+	require.EqualValues(t, http.StatusMethodNotAllowed, response.StatusCode)
+}
+
 func TestJSONBodyArgs(t *testing.T) {
 	testDB := dbManager.createInitializedDB(t)
 	defer dbManager.dropDB(t, testDB)
