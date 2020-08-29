@@ -514,3 +514,63 @@ func TestServePublicFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fileBody, responseBody)
 }
+
+func TestQueryArgs(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+	defer hi.stop(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	response := browser.get(t, "/hello?name=Jack")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Hello, Jack")
+}
+
+func TestCookieSession(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+	defer hi.stop(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	for i := 1; i < 5; i++ {
+		response := browser.get(t, "/hello")
+		require.EqualValues(t, http.StatusOK, response.StatusCode)
+		responseBody := string(readResponseBody(t, response))
+		assert.Contains(t, responseBody, fmt.Sprintf("%d times", i))
+	}
+}
