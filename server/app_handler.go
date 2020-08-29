@@ -73,12 +73,14 @@ const (
 	RequestParamTypeInt
 	RequestParamTypeBigint
 	RequestParamTypeArray
+	RequestParamTypeObject
 )
 
 type RequestParam struct {
 	Name         string
 	Type         int8
 	ArrayElement *RequestParam
+	ObjectFields []*RequestParam
 	TrimSpace    bool
 	Required     bool
 	NullifyEmpty bool
@@ -100,6 +102,8 @@ func requestParamFromAppConfig(acrp *appconf.RequestParam) (*RequestParam, error
 		rp.Type = RequestParamTypeBigint
 	case "array":
 		rp.Type = RequestParamTypeArray
+	case "object":
+		rp.Type = RequestParamTypeObject
 	default:
 		return nil, fmt.Errorf("param %s has unknown type: %s", acrp.Name, acrp.Type)
 	}
@@ -135,6 +139,19 @@ func (e arrayElementErrors) Error() string {
 			sb.WriteString(", ")
 		}
 		fmt.Fprintf(sb, "Element %d: %v", ee.Index, ee.Err)
+	}
+	return sb.String()
+}
+
+type objectErrors map[string]error
+
+func (e objectErrors) Error() string {
+	sb := &strings.Builder{}
+	for k, v := range e {
+		if sb.Len() > 0 {
+			sb.WriteString(", ")
+		}
+		fmt.Fprintf(sb, "%s: %v", k, v)
 	}
 	return sb.String()
 }
@@ -244,7 +261,7 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 					}
 				}
 				if errors != nil {
-					return parsedArray, errors
+					return nil, errors
 				}
 				return parsedArray, nil
 			} else {
@@ -252,6 +269,33 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 			}
 		default:
 			return nil, fmt.Errorf("%s: cannot convert %v to array", rp.Name, value)
+		}
+
+	case RequestParamTypeObject:
+		switch value := value.(type) {
+		case map[string]interface{}:
+			if rp.ObjectFields != nil {
+				parsedObject := make(map[string]interface{}, len(rp.ObjectFields))
+				var errors objectErrors
+				for _, f := range rp.ObjectFields {
+					var err error
+					parsedObject[f.Name], err = f.Parse(value[f.Name])
+					if err != nil {
+						if errors == nil {
+							errors = make(objectErrors)
+						}
+						errors[f.Name] = err
+					}
+				}
+				if errors != nil {
+					return nil, errors
+				}
+				return parsedObject, nil
+			} else {
+				return value, nil
+			}
+		default:
+			return nil, fmt.Errorf("%s: cannot convert %v to object", rp.Name, value)
 		}
 
 	default:

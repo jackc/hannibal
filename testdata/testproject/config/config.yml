@@ -18,3 +18,19 @@ routes:
         type: array
         array-element:
           type: int
+      - name: object
+        type: object
+        object-fields:
+          - name: foo
+            type: text
+          - name: bar
+            type: int
+      - name: arrayOfObject
+        type: array
+        array-element:
+          type: object
+          object-fields:
+            - name: foo
+              type: text
+            - name: bar
+              type: int

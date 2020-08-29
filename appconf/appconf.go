@@ -28,8 +28,9 @@ type Route struct {
 type RequestParam struct {
 	Name         string
 	Type         string
-	ArrayElement *RequestParam `yaml:"array-element"`
-	TrimSpace    *bool         `yaml:"trim-space"`
+	ArrayElement *RequestParam   `yaml:"array-element"`
+	ObjectFields []*RequestParam `yaml:"object-fields"`
+	TrimSpace    *bool           `yaml:"trim-space"`
 	Required     bool
 	NullifyEmpty bool `yaml:"nullify-empty"`
 }

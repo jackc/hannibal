@@ -118,6 +118,32 @@ func TestRequestParamParse(t *testing.T) {
 			value:  []interface{}{"42"},
 			result: []interface{}{int32(42)},
 		},
+		{
+			desc: "object unconstrained",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeObject,
+			},
+			value:  map[string]interface{}{"foo": "bar", "baz": float64(42)},
+			result: map[string]interface{}{"foo": "bar", "baz": float64(42)},
+		},
+		{
+			desc: "object from typed object",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeObject,
+				ObjectFields: []*server.RequestParam{
+					{
+						Name: "foo",
+						Type: server.RequestParamTypeText,
+					},
+					{
+						Name: "baz",
+						Type: server.RequestParamTypeInt,
+					},
+				},
+			},
+			value:  map[string]interface{}{"foo": "bar", "baz": "42", "ignored": "ignored"},
+			result: map[string]interface{}{"foo": "bar", "baz": int32(42)},
+		},
 	} {
 		t.Run(tt.desc, func(t *testing.T) {
 			result, err := tt.rp.Parse(tt.value)

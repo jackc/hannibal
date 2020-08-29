@@ -656,10 +656,38 @@ func TestJSONArrayAndObjectArgs(t *testing.T) {
 	requestData := map[string]interface{}{
 		"untypedArray": []interface{}{"foo", float64(42)},
 		"typedArray":   []interface{}{"1", float64(7777)},
+		"object": map[string]interface{}{
+			"foo": "abc",
+			"bar": int64(42),
+		},
+		"arrayOfObject": []map[string]interface{}{
+			{
+				"foo": "def",
+				"bar": int64(1),
+			},
+			{
+				"foo": "ghi",
+				"bar": int64(2),
+			},
+		},
 	}
 	expectedResult := map[string]interface{}{
 		"untypedArray": []interface{}{"foo", float64(42)},
 		"typedArray":   []interface{}{float64(1), float64(7777)},
+		"object": map[string]interface{}{
+			"foo": "abc",
+			"bar": float64(42),
+		},
+		"arrayOfObject": []interface{}{
+			map[string]interface{}{
+				"foo": "def",
+				"bar": float64(1),
+			},
+			map[string]interface{}{
+				"foo": "ghi",
+				"bar": float64(2),
+			},
+		},
 	}
 	requestBody, err := json.Marshal(requestData)
 	require.NoError(t, err)
