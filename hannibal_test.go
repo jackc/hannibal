@@ -246,6 +246,13 @@ func (hi *hannibalInstance) deploy(t *testing.T, apiKey, deployKey string) {
 	)
 }
 
+func (hi *hannibalInstance) migrate(t *testing.T) {
+	execHannibal(t, "migrate",
+		"--project-path", hi.projectPath,
+		"--database-dsn", hi.databaseDSN,
+	)
+}
+
 func (hi *hannibalInstance) stop(t *testing.T) {
 	if hi.httpProcess == nil {
 		t.Fatal("no process to stop")
@@ -360,6 +367,37 @@ func readResponseBody(t *testing.T, r *http.Response) []byte {
 	require.NoError(t, err)
 
 	return data
+}
+
+func TestMigrate(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+	projectPath := filepath.Join(appDir, "project")
+	err := copy.Copy(filepath.Join("testdata", "testproject"), projectPath)
+	require.NoError(t, err)
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		projectPath: projectPath,
+	}
+
+	hi.migrate(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := pgx.Connect(ctx, fmt.Sprintf("database=%s", testDB))
+	require.NoError(t, err)
+	defer conn.Close(ctx)
+
+	// Test that the migration executed.
+	var n int
+	err = conn.QueryRow(ctx, "select count(*) from todos").Scan(&n)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, n)
 }
 
 func TestDevelopAutoLoads(t *testing.T) {
