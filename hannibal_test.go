@@ -247,7 +247,7 @@ func (hi *hannibalInstance) deploy(t *testing.T, apiKey, deployKey string) {
 }
 
 func (hi *hannibalInstance) migrate(t *testing.T) {
-	execHannibal(t, "migrate",
+	execHannibal(t, "db", "migrate",
 		"--project-path", hi.projectPath,
 		"--database-dsn", hi.databaseDSN,
 	)

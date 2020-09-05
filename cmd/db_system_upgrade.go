@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// dbUpgradeCmd represents the db init command
-var dbUpgradeCmd = &cobra.Command{
-	Use:   "upgrade",
-	Short: "Upgrade database",
+// dbSystemUpgradeCmd represents the db init command
+var dbSystemUpgradeCmd = &cobra.Command{
+	Use:   "system-upgrade",
+	Short: "Upgrade system database",
 	Run: func(cmd *cobra.Command, args []string) {
 		logger := current.Logger(context.Background())
 
@@ -23,5 +23,5 @@ var dbUpgradeCmd = &cobra.Command{
 }
 
 func init() {
-	dbCmd.AddCommand(dbUpgradeCmd)
+	dbCmd.AddCommand(dbSystemUpgradeCmd)
 }

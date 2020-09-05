@@ -59,3 +59,33 @@ func newAppMigrator(ctx context.Context, conn *pgx.Conn, migrationPath string) (
 
 	return migrator, nil
 }
+
+func GetAppDBStatus(ctx context.Context, migrationPath string) (*DBStatus, error) {
+	dbconfig := GetConfig(ctx)
+
+	conn, err := pgx.Connect(ctx, dbconfig.SysConnString)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close(ctx)
+
+	return getAppDBStatus(ctx, conn, migrationPath)
+}
+
+func getAppDBStatus(ctx context.Context, conn *pgx.Conn, migrationPath string) (*DBStatus, error) {
+	migrator, err := newAppMigrator(ctx, conn, migrationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	dbStatus := &DBStatus{
+		DesiredVersion: int32(len(migrator.Migrations)),
+	}
+
+	dbStatus.CurrentVersion, err = migrator.GetCurrentVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return dbStatus, nil
+}

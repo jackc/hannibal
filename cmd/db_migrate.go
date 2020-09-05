@@ -32,7 +32,7 @@ var dbMigrateCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(dbMigrateCmd)
+	dbCmd.AddCommand(dbMigrateCmd)
 
 	dbMigrateCmd.Flags().StringP("project-path", "p", ".", "Project path")
 }
