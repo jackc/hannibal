@@ -4,6 +4,10 @@ routes:
     params:
       - name: name
         nullify-empty: true
+  - path: /hello/route/param/{name}
+    func: hello
+    params:
+      - name: name
   - post: /api/hello
     func: api_hello
     params:

@@ -638,6 +638,35 @@ func TestServePublicFiles(t *testing.T) {
 	require.Equal(t, fileBody, responseBody)
 }
 
+func TestRouteArgs(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+	defer hi.stop(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	response := browser.get(t, "/hello/route/param/Jack")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Hello, Jack")
+}
+
 func TestQueryArgs(t *testing.T) {
 	testDB := dbManager.createInitializedDB(t)
 	defer dbManager.dropDB(t, testDB)

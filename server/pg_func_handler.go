@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgtype"
 )
@@ -38,6 +39,11 @@ func extractRawArgs(r *http.Request) (map[string]interface{}, error) {
 	rawArgs := make(map[string]interface{})
 	for key, values := range r.URL.Query() {
 		rawArgs[key] = values[0]
+	}
+
+	routeParams := chi.RouteContext(r.Context()).URLParams
+	for i := 0; i < len(routeParams.Keys); i++ {
+		rawArgs[routeParams.Keys[i]] = routeParams.Values[i]
 	}
 
 	if r.Header.Get("Content-Type") == "application/json" {
