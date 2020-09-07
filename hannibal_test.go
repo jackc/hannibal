@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -392,6 +393,12 @@ func (b *browser) get(t *testing.T, queryPath string) *http.Response {
 	return response
 }
 
+func (b *browser) post(t *testing.T, queryPath string, contentType string, body []byte) *http.Response {
+	response, err := b.client.Post(fmt.Sprintf(`http://%s%s`, b.serverAddr, queryPath), contentType, bytes.NewReader(body))
+	require.NoError(t, err)
+	return response
+}
+
 type apiClient struct {
 	serverAddr string
 	client     *http.Client
@@ -691,6 +698,37 @@ func TestQueryArgs(t *testing.T) {
 	browser := newBrowser(t, hi.httpAddr)
 
 	response := browser.get(t, "/hello?name=Jack")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Hello, Jack")
+}
+
+func TestFormArgs(t *testing.T) {
+	testDB := dbManager.createInitializedDB(t)
+	defer dbManager.dropDB(t, testDB)
+
+	appDir := t.TempDir()
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+	defer hi.stop(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	form := url.Values{}
+	form.Add("name", "Jack")
+	response := browser.post(t, "/hello", "application/x-www-form-urlencoded", []byte(form.Encode()))
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
 	assert.Contains(t, responseBody, "Hello, Jack")

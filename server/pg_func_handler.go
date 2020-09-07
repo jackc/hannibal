@@ -46,12 +46,21 @@ func extractRawArgs(r *http.Request) (map[string]interface{}, error) {
 		rawArgs[routeParams.Keys[i]] = routeParams.Values[i]
 	}
 
-	if r.Header.Get("Content-Type") == "application/json" {
+	switch r.Header.Get("Content-Type") {
+	case "application/json":
 		decoder := json.NewDecoder(r.Body)
 		decoder.UseNumber()
 		err := decoder.Decode(&rawArgs)
 		if err != nil {
 			return nil, err
+		}
+	case "application/x-www-form-urlencoded":
+		err := r.ParseForm()
+		if err != nil {
+			return nil, err
+		}
+		for key, values := range r.PostForm {
+			rawArgs[key] = values[0]
 		}
 	}
 
