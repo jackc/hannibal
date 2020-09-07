@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -140,6 +141,8 @@ func execHannibal(t *testing.T, args ...string) string {
 	return string(output)
 }
 
+var httpPort int64 = 5000
+
 type hannibalInstance struct {
 	dbName      string
 	databaseDSN string
@@ -189,7 +192,8 @@ func (hi *hannibalInstance) develop(t *testing.T) {
 	}
 
 	if hi.httpAddr == "" {
-		hi.httpAddr = "127.0.0.1:5000"
+		port := atomic.AddInt64(&httpPort, 1)
+		hi.httpAddr = fmt.Sprintf("127.0.0.1:%d", port)
 	}
 
 	hi.httpProcess = spawnHannibal(t,
@@ -208,7 +212,8 @@ func (hi *hannibalInstance) serve(t *testing.T) {
 	}
 
 	if hi.httpAddr == "" {
-		hi.httpAddr = "127.0.0.1:5000"
+		port := atomic.AddInt64(&httpPort, 1)
+		hi.httpAddr = fmt.Sprintf("127.0.0.1:%d", port)
 	}
 
 	hi.httpProcess = spawnHannibal(t,
@@ -482,6 +487,8 @@ func runHannibalServe(t *testing.T, projectPath string) (*hannibalInstance, func
 }
 
 func TestMigrate(t *testing.T) {
+	t.Parallel()
+
 	testDB := dbManager.createInitializedDB(t)
 	defer dbManager.dropDB(t, testDB)
 
@@ -513,6 +520,8 @@ func TestMigrate(t *testing.T) {
 }
 
 func TestDevelopAutoLoads(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalDevelop(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -563,6 +572,8 @@ func TestDevelopAutoReloadsOnSQLChanges(t *testing.T) {
 }
 
 func TestDevelopAutoReloadsOnTemplateChanges(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalDevelop(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -595,6 +606,8 @@ func TestDevelopAutoReloadsOnTemplateChanges(t *testing.T) {
 }
 
 func TestDevelopPublicFiles(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalDevelop(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -608,6 +621,8 @@ func TestDevelopPublicFiles(t *testing.T) {
 }
 
 func TestServePublicFiles(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -621,6 +636,8 @@ func TestServePublicFiles(t *testing.T) {
 }
 
 func TestRouteArgs(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -632,6 +649,8 @@ func TestRouteArgs(t *testing.T) {
 }
 
 func TestQueryArgs(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -643,6 +662,8 @@ func TestQueryArgs(t *testing.T) {
 }
 
 func TestFormArgs(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -656,6 +677,8 @@ func TestFormArgs(t *testing.T) {
 }
 
 func TestMethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -665,6 +688,8 @@ func TestMethodNotAllowed(t *testing.T) {
 }
 
 func TestJSONBodyArgs(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -679,6 +704,8 @@ func TestJSONBodyArgs(t *testing.T) {
 }
 
 func TestJSONArrayAndObjectArgs(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
@@ -732,6 +759,8 @@ func TestJSONArrayAndObjectArgs(t *testing.T) {
 }
 
 func TestCookieSession(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
