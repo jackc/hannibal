@@ -1,10 +1,12 @@
 package main_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -264,6 +266,14 @@ func (hi *hannibalInstance) stop(t *testing.T) {
 
 type hannibalProcess struct {
 	process *os.Process
+
+	readStdout     *os.File
+	writeStdout    *os.File
+	readStdoutDone chan struct{}
+
+	readStderr     *os.File
+	writeStderr    *os.File
+	readStderrDone chan struct{}
 }
 
 func (hp *hannibalProcess) stop(t *testing.T) {
@@ -289,21 +299,69 @@ func (hp *hannibalProcess) stop(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Timeout waiting for hannibal to terminate")
 	}
+
+	err = hp.writeStdout.Close()
+	assert.NoError(t, err)
+	err = hp.writeStderr.Close()
+	assert.NoError(t, err)
+
+	select {
+	case <-hp.readStdoutDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Timeout waiting for to finish logging stdout")
+	}
+
+	select {
+	case <-hp.readStderrDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Timeout waiting for to finish logging stdout")
+	}
+}
+
+func pipeToLog(t *testing.T, prefix string, r io.Reader) {
+	s := bufio.NewScanner(r)
+	for s.Scan() {
+		t.Log(prefix, s.Text())
+	}
+
+	require.NoError(t, s.Err())
 }
 
 func spawnHannibal(t *testing.T, args ...string) *hannibalProcess {
 	cmdPath := filepath.Join("tmp", "test", "bin", "hannibal")
 	argv := []string{cmdPath}
 	argv = append(argv, args...)
+
+	readStdout, writeStdout, err := os.Pipe()
+	require.NoError(t, err)
+	readStdoutDone := make(chan struct{})
+	go func() {
+		pipeToLog(t, "stdout", readStdout)
+		close(readStdoutDone)
+	}()
+	readStderr, writeStderr, err := os.Pipe()
+	require.NoError(t, err)
+	readStderrDone := make(chan struct{})
+	go func() {
+		pipeToLog(t, "stderr", readStderr)
+		close(readStderrDone)
+	}()
+
 	procAttr := &os.ProcAttr{
-		Files: []*os.File{nil, os.Stdout, os.Stderr},
+		Files: []*os.File{nil, writeStdout, writeStderr},
 	}
 
 	process, err := os.StartProcess(cmdPath, argv, procAttr)
 	require.NoError(t, err)
 
 	hp := &hannibalProcess{
-		process: process,
+		process:        process,
+		readStdout:     readStdout,
+		writeStdout:    writeStdout,
+		readStdoutDone: readStdoutDone,
+		readStderr:     readStderr,
+		writeStderr:    writeStderr,
+		readStderrDone: readStderrDone,
 	}
 
 	return hp
