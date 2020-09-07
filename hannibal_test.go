@@ -434,6 +434,53 @@ func readResponseBody(t *testing.T, r *http.Response) []byte {
 	return data
 }
 
+func runHannibalDevelop(t *testing.T, originalProjectPath string) (*hannibalInstance, func()) {
+	testDB := dbManager.createInitializedDB(t)
+
+	appDir := t.TempDir()
+	projectPath := filepath.Join(appDir, "project")
+	err := copy.Copy(originalProjectPath, projectPath)
+	require.NoError(t, err)
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		projectPath: projectPath,
+	}
+
+	hi.develop(t)
+
+	return hi, func() {
+		hi.stop(t)
+		dbManager.dropDB(t, testDB)
+	}
+}
+
+func runHannibalServe(t *testing.T, projectPath string) (*hannibalInstance, func()) {
+	testDB := dbManager.createInitializedDB(t)
+
+	appDir := t.TempDir()
+
+	hi := &hannibalInstance{
+		dbName:      testDB,
+		databaseDSN: fmt.Sprintf("database=%s", testDB),
+		appPath:     appDir,
+		projectPath: filepath.Join("testdata", "testproject"),
+	}
+
+	hi.serve(t)
+
+	hi.systemCreateUser(t, "test")
+	apiKey := hi.systemCreateAPIKey(t, "test")
+	deployKey := hi.systemCreateDeployKey(t, "test")
+	hi.deploy(t, apiKey, deployKey)
+
+	return hi, func() {
+		hi.stop(t)
+		dbManager.dropDB(t, testDB)
+	}
+}
+
 func TestMigrate(t *testing.T) {
 	testDB := dbManager.createInitializedDB(t)
 	defer dbManager.dropDB(t, testDB)
@@ -466,25 +513,10 @@ func TestMigrate(t *testing.T) {
 }
 
 func TestDevelopAutoLoads(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-	projectPath := filepath.Join(appDir, "project")
-	err := copy.Copy(filepath.Join("testdata", "testproject"), projectPath)
-	require.NoError(t, err)
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		projectPath: projectPath,
-	}
-
-	hi.develop(t)
-	defer hi.stop(t)
+	hi, cleanup := runHannibalDevelop(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-
 	response := browser.get(t, `/hello?name=Jack`)
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
@@ -492,22 +524,8 @@ func TestDevelopAutoLoads(t *testing.T) {
 }
 
 func TestDevelopAutoReloadsOnSQLChanges(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-	projectPath := filepath.Join(appDir, "project")
-	err := copy.Copy(filepath.Join("testdata", "testproject"), projectPath)
-	require.NoError(t, err)
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		projectPath: projectPath,
-	}
-
-	hi.develop(t)
-	defer hi.stop(t)
+	hi, cleanup := runHannibalDevelop(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	newSQL := `create function hello(
 		out template text,
@@ -525,7 +543,7 @@ func TestDevelopAutoReloadsOnSQLChanges(t *testing.T) {
 	$$;
 	`
 
-	err = ioutil.WriteFile(filepath.Join(projectPath, "sql", "hello.sql"), []byte(newSQL), 0644)
+	err := ioutil.WriteFile(filepath.Join(hi.projectPath, "sql", "hello.sql"), []byte(newSQL), 0644)
 	require.NoError(t, err)
 
 	browser := newBrowser(t, hi.httpAddr)
@@ -545,23 +563,8 @@ func TestDevelopAutoReloadsOnSQLChanges(t *testing.T) {
 }
 
 func TestDevelopAutoReloadsOnTemplateChanges(t *testing.T) {
-
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-	projectPath := filepath.Join(appDir, "project")
-	err := copy.Copy(filepath.Join("testdata", "testproject"), projectPath)
-	require.NoError(t, err)
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		projectPath: projectPath,
-	}
-
-	hi.develop(t)
-	defer hi.stop(t)
+	hi, cleanup := runHannibalDevelop(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	newTemplate := `<html>
 	<body>
@@ -572,7 +575,7 @@ func TestDevelopAutoReloadsOnTemplateChanges(t *testing.T) {
 	</html>
 	`
 
-	err = ioutil.WriteFile(filepath.Join(projectPath, "template", "hello.html"), []byte(newTemplate), 0644)
+	err := ioutil.WriteFile(filepath.Join(hi.projectPath, "template", "hello.html"), []byte(newTemplate), 0644)
 	require.NoError(t, err)
 
 	browser := newBrowser(t, hi.httpAddr)
@@ -592,20 +595,10 @@ func TestDevelopAutoReloadsOnTemplateChanges(t *testing.T) {
 }
 
 func TestDevelopPublicFiles(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.develop(t)
-	defer hi.stop(t)
+	hi, cleanup := runHannibalDevelop(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-
 	response := browser.get(t, "/hello.html")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := readResponseBody(t, response)
@@ -615,28 +608,10 @@ func TestDevelopPublicFiles(t *testing.T) {
 }
 
 func TestServePublicFiles(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.serve(t)
-	defer hi.stop(t)
-
-	hi.systemCreateUser(t, "test")
-	apiKey := hi.systemCreateAPIKey(t, "test")
-	deployKey := hi.systemCreateDeployKey(t, "test")
-	hi.deploy(t, apiKey, deployKey)
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-
 	response := browser.get(t, "/hello.html")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := readResponseBody(t, response)
@@ -646,28 +621,10 @@ func TestServePublicFiles(t *testing.T) {
 }
 
 func TestRouteArgs(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.serve(t)
-	defer hi.stop(t)
-
-	hi.systemCreateUser(t, "test")
-	apiKey := hi.systemCreateAPIKey(t, "test")
-	deployKey := hi.systemCreateDeployKey(t, "test")
-	hi.deploy(t, apiKey, deployKey)
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-
 	response := browser.get(t, "/hello/route/param/Jack")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
@@ -675,28 +632,10 @@ func TestRouteArgs(t *testing.T) {
 }
 
 func TestQueryArgs(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.serve(t)
-	defer hi.stop(t)
-
-	hi.systemCreateUser(t, "test")
-	apiKey := hi.systemCreateAPIKey(t, "test")
-	deployKey := hi.systemCreateDeployKey(t, "test")
-	hi.deploy(t, apiKey, deployKey)
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-
 	response := browser.get(t, "/hello?name=Jack")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
@@ -704,28 +643,10 @@ func TestQueryArgs(t *testing.T) {
 }
 
 func TestFormArgs(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.serve(t)
-	defer hi.stop(t)
-
-	hi.systemCreateUser(t, "test")
-	apiKey := hi.systemCreateAPIKey(t, "test")
-	deployKey := hi.systemCreateDeployKey(t, "test")
-	hi.deploy(t, apiKey, deployKey)
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-
 	form := url.Values{}
 	form.Add("name", "Jack")
 	response := browser.post(t, "/hello", "application/x-www-form-urlencoded", []byte(form.Encode()))
@@ -735,55 +656,19 @@ func TestFormArgs(t *testing.T) {
 }
 
 func TestMethodNotAllowed(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.serve(t)
-	defer hi.stop(t)
-
-	hi.systemCreateUser(t, "test")
-	apiKey := hi.systemCreateAPIKey(t, "test")
-	deployKey := hi.systemCreateDeployKey(t, "test")
-	hi.deploy(t, apiKey, deployKey)
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	apiClient := newAPIClient(t, hi.httpAddr)
-
 	response := apiClient.get(t, "/api/hello")
 	require.EqualValues(t, http.StatusMethodNotAllowed, response.StatusCode)
 }
 
 func TestJSONBodyArgs(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.serve(t)
-	defer hi.stop(t)
-
-	hi.systemCreateUser(t, "test")
-	apiKey := hi.systemCreateAPIKey(t, "test")
-	deployKey := hi.systemCreateDeployKey(t, "test")
-	hi.deploy(t, apiKey, deployKey)
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	apiClient := newAPIClient(t, hi.httpAddr)
-
 	response := apiClient.post(t, "/api/hello", "application/json", []byte(`{"name": "Jack"}`))
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
@@ -794,28 +679,10 @@ func TestJSONBodyArgs(t *testing.T) {
 }
 
 func TestJSONArrayAndObjectArgs(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.serve(t)
-	defer hi.stop(t)
-
-	hi.systemCreateUser(t, "test")
-	apiKey := hi.systemCreateAPIKey(t, "test")
-	deployKey := hi.systemCreateDeployKey(t, "test")
-	hi.deploy(t, apiKey, deployKey)
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	apiClient := newAPIClient(t, hi.httpAddr)
-
 	requestData := map[string]interface{}{
 		"untypedArray": []interface{}{"foo", float64(42)},
 		"typedArray":   []interface{}{"1", float64(7777)},
@@ -865,28 +732,10 @@ func TestJSONArrayAndObjectArgs(t *testing.T) {
 }
 
 func TestCookieSession(t *testing.T) {
-	testDB := dbManager.createInitializedDB(t)
-	defer dbManager.dropDB(t, testDB)
-
-	appDir := t.TempDir()
-
-	hi := &hannibalInstance{
-		dbName:      testDB,
-		databaseDSN: fmt.Sprintf("database=%s", testDB),
-		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
-	}
-
-	hi.serve(t)
-	defer hi.stop(t)
-
-	hi.systemCreateUser(t, "test")
-	apiKey := hi.systemCreateAPIKey(t, "test")
-	deployKey := hi.systemCreateDeployKey(t, "test")
-	hi.deploy(t, apiKey, deployKey)
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-
 	for i := 1; i < 5; i++ {
 		response := browser.get(t, "/hello")
 		require.EqualValues(t, http.StatusOK, response.StatusCode)
