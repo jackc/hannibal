@@ -9,3 +9,26 @@ routes:
     params:
       - name: name
         nullify-empty: true
+  - post: /user_registration
+    func: http_user_registration
+    params:
+      - name: username
+        type: text
+        required: true
+      - name: password
+        type: text
+        required: true
+    digest-password:
+      password-param: password
+      digest-param: passwordDigest
+  - post: /login
+    func: http_post_login
+    params:
+      - name: username
+        type: text
+      - name: password
+        type: text
+    check-password-digest:
+      password-param: password
+      result-param: validPassword
+      get-password-digest-func: get_user_password_digest

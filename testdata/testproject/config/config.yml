@@ -1,4 +1,25 @@
 routes:
+  - post: /api/user/register
+    func: http_api_register_user
+    params:
+      - name: username
+        type: text
+      - name: password
+        type: text
+    digest-password:
+      password-param: password
+      digest-param: passwordDigest
+  - post: /api/user/login
+    func: http_api_login
+    params:
+      - name: username
+        type: text
+      - name: password
+        type: text
+    check-password-digest:
+      password-param: password
+      result-param: validPassword
+      get-password-digest-func: get_user_password_digest
   - path: /hello
     func: hello
     params:

@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgtype"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var allowedInArgs = []string{
@@ -28,11 +30,13 @@ var allowedOutArgs = []string{
 }
 
 type PGFuncHandler struct {
-	SQL          string
-	FuncInArgs   []string
-	Params       []*RequestParam
-	RootTemplate *template.Template
-	Host         *Host
+	Params              []*RequestParam
+	DigestPassword      *DigestPassword
+	CheckPasswordDigest *CheckPasswordDigest
+	SQL                 string
+	FuncInArgs          []string
+	RootTemplate        *template.Template
+	Host                *Host
 }
 
 func extractRawArgs(r *http.Request) (map[string]interface{}, error) {
@@ -75,7 +79,7 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	errors := make(map[string]string)
+	argErrors := make(map[string]string)
 
 	var queryArgs map[string]interface{}
 	if len(h.Params) != 0 {
@@ -84,13 +88,13 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if value, err := qp.Parse(rawArgs[qp.Name]); err == nil {
 				queryArgs[qp.Name] = value
 			} else {
-				errors[qp.Name] = err.Error()
+				argErrors[qp.Name] = err.Error()
 			}
 		}
 	}
 
-	if len(errors) != 0 {
-		response, err := json.Marshal(map[string]interface{}{"errors": errors})
+	if len(argErrors) != 0 {
+		response, err := json.Marshal(map[string]interface{}{"errors": argErrors})
 		if err != nil {
 			panic(err) // cannot happen
 		}
@@ -104,6 +108,48 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var requestCookieSession []byte
 	if cookie, err := r.Cookie("hannibal-session"); err == nil {
 		h.Host.secureCookie.Decode("hannibal-session", cookie.Value, &requestCookieSession)
+	}
+
+	if h.DigestPassword != nil {
+		if password, ok := queryArgs[h.DigestPassword.PasswordParam]; ok {
+			if password, ok := password.(string); ok && password != "" {
+				passwordDigest, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+				if err != nil {
+					panic(err)
+				}
+				queryArgs[h.DigestPassword.DigestParam] = string(passwordDigest)
+			}
+		}
+	}
+
+	if h.CheckPasswordDigest != nil {
+		passwordInterface := queryArgs[h.CheckPasswordDigest.PasswordParam]
+		delete(queryArgs, h.CheckPasswordDigest.PasswordParam)
+
+		if password, ok := passwordInterface.(string); ok {
+			// May want to dedup this with the main query generate SQL args
+			sqlArgs := make([]interface{}, 0, len(h.CheckPasswordDigest.FuncInArgs))
+			for _, ia := range h.CheckPasswordDigest.FuncInArgs {
+				switch ia {
+				case "args":
+					sqlArgs = append(sqlArgs, queryArgs)
+				case "cookie_session":
+					sqlArgs = append(sqlArgs, requestCookieSession)
+				}
+				current.Logger(ctx).Info().Interface("args", sqlArgs).Msg("sqlArgs")
+			}
+
+			var passwordDigest []byte
+			err = db.App(ctx).QueryRow(ctx, h.CheckPasswordDigest.SQL, sqlArgs...).Scan(
+				&passwordDigest,
+			)
+			if err != nil {
+				panic(err)
+			}
+
+			err := bcrypt.CompareHashAndPassword(passwordDigest, []byte(password))
+			queryArgs[h.CheckPasswordDigest.ResultParam] = err == nil
+		}
 	}
 
 	sqlArgs := make([]interface{}, 0, len(h.FuncInArgs))
@@ -183,38 +229,9 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func NewPGFuncHandler(name string, proargmodes []string, proargnames []string) (*PGFuncHandler, error) {
+func NewPGFuncHandler(name string, inArgMap map[string]struct{}, outArgMap map[string]struct{}) (*PGFuncHandler, error) {
 	if name == "" {
 		return nil, errors.New("name cannot be empty")
-	}
-
-	if len(proargmodes) == 0 {
-		return nil, errors.New("proargmodes cannot be empty")
-	}
-
-	if len(proargnames) == 0 {
-		return nil, errors.New("proargnames cannot be empty")
-	}
-
-	if len(proargmodes) != len(proargnames) {
-		return nil, errors.New("proargmodes and proargnames are not the same length")
-	}
-
-	inArgMap := make(map[string]struct{})
-	outArgMap := make(map[string]struct{})
-
-	for i, m := range proargmodes {
-		switch m {
-		case "i":
-			inArgMap[proargnames[i]] = struct{}{}
-		case "o":
-			outArgMap[proargnames[i]] = struct{}{}
-		case "b":
-			inArgMap[proargnames[i]] = struct{}{}
-			outArgMap[proargnames[i]] = struct{}{}
-		default:
-			return nil, fmt.Errorf("unknown proargmode: %s", m)
-		}
 	}
 
 	if _, hasStatus := outArgMap["status"]; !hasStatus {

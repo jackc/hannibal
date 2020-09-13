@@ -18,20 +18,12 @@ import (
 func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes []appconf.Route, tmpl *template.Template, host *Host, publicPath string) (http.Handler, error) {
 	router := chi.NewRouter()
 	for _, r := range routes {
-		var proargmodes []string
-		var proargnames []string
-
-		err := dbconn.QueryRow(
-			ctx,
-			"select proargmodes::text[], proargnames from pg_proc where proname = $1 and pronamespace = ($2::text)::regnamespace",
-			r.Func,
-			schema,
-		).Scan(&proargmodes, &proargnames)
+		inArgs, outArgs, err := getSQLFuncArgs(ctx, dbconn, schema, r.Func)
 		if err != nil {
-			return nil, fmt.Errorf("failed to introspect function %s: %v", r.Func, err)
+			return nil, err
 		}
 
-		h, err := NewPGFuncHandler(r.Func, proargmodes, proargnames)
+		h, err := NewPGFuncHandler(r.Func, inArgs, outArgs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build handler for function %s: %v", r.Func, err)
 		}
@@ -43,6 +35,24 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes 
 			if err != nil {
 				return nil, fmt.Errorf("failed to convert request param %s: %v", qp.Name, err)
 			}
+		}
+
+		if r.DigestPassword != nil {
+			h.DigestPassword = &DigestPassword{
+				PasswordParam: r.DigestPassword.PasswordParam,
+				DigestParam:   r.DigestPassword.DigestParam,
+			}
+		}
+
+		if r.CheckPasswordDigest != nil {
+			inArgs, _, err := getSQLFuncArgs(ctx, dbconn, schema, r.CheckPasswordDigest.GetPasswordDigestFunc)
+			if err != nil {
+				return nil, err
+			}
+
+			h.CheckPasswordDigest, err = newCheckPasswordDigest(r.CheckPasswordDigest.GetPasswordDigestFunc, inArgs)
+			h.CheckPasswordDigest.PasswordParam = r.CheckPasswordDigest.PasswordParam
+			h.CheckPasswordDigest.ResultParam = r.CheckPasswordDigest.ResultParam
 		}
 
 		h.RootTemplate = tmpl
@@ -301,4 +311,97 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 	default:
 		return nil, fmt.Errorf("unknown param type %v", rp.Type)
 	}
+}
+
+type DigestPassword struct {
+	PasswordParam string
+	DigestParam   string
+}
+
+type CheckPasswordDigest struct {
+	PasswordParam string
+	ResultParam   string
+	SQL           string
+	FuncInArgs    []string
+}
+
+func newCheckPasswordDigest(name string, inArgMap map[string]struct{}) (*CheckPasswordDigest, error) {
+	if name == "" {
+		return nil, errors.New("name cannot be empty")
+	}
+
+	inArgs := make([]string, 0, len(inArgMap))
+	// Allowed input arguments in order.
+	for _, a := range allowedInArgs {
+		if _, ok := inArgMap[a]; ok {
+			inArgs = append(inArgs, a)
+			delete(inArgMap, a)
+		}
+	}
+
+	// inArgMap should be empty
+	if len(inArgMap) > 0 {
+		for k, _ := range inArgMap {
+			return nil, fmt.Errorf("unknown arg: %s", k)
+		}
+	}
+
+	sb := &strings.Builder{}
+
+	fmt.Fprintf(sb, "select %s(", name)
+	for i, arg := range inArgs {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		fmt.Fprintf(sb, "%s => $%d", arg, i+1)
+	}
+	sb.WriteString(")")
+
+	cpd := &CheckPasswordDigest{
+		SQL:        sb.String(),
+		FuncInArgs: inArgs,
+	}
+
+	return cpd, nil
+}
+
+func getSQLFuncArgs(ctx context.Context, dbconn db.DBConn, schema string, name string) (inArgs map[string]struct{}, outArgs map[string]struct{}, err error) {
+	var proargmodes []string
+	var proargnames []string
+
+	err = dbconn.QueryRow(
+		ctx,
+		"select proargmodes::text[], proargnames from pg_proc where proname = $1 and pronamespace = ($2::text)::regnamespace",
+		name,
+		schema,
+	).Scan(&proargmodes, &proargnames)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to introspect function %s: %v", name, err)
+	}
+
+	inArgs = make(map[string]struct{})
+	outArgs = make(map[string]struct{})
+
+	for i, n := range proargnames {
+		var mode string
+		if len(proargmodes) <= i {
+			mode = "i"
+		} else {
+			mode = proargmodes[i]
+		}
+
+		switch mode {
+		case "i":
+			inArgs[n] = struct{}{}
+		case "o":
+			outArgs[n] = struct{}{}
+		case "b":
+			inArgs[n] = struct{}{}
+			outArgs[n] = struct{}{}
+		default:
+			return nil, nil, fmt.Errorf("unknown proargmode: %s", n)
+		}
+	}
+
+	return inArgs, outArgs, nil
 }

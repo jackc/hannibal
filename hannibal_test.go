@@ -70,7 +70,7 @@ func (dbm *dbManagerT) ensureConn(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func (dbm *dbManagerT) createInitializedDB(t *testing.T) string {
+func (dbm *dbManagerT) createInitializedDB(t *testing.T, projectPath string) string {
 	dbm.mutex.Lock()
 	defer dbm.mutex.Unlock()
 	dbm.ensureConn(t)
@@ -91,13 +91,21 @@ func (dbm *dbManagerT) createInitializedDB(t *testing.T) string {
 			"--database-dsn", fmt.Sprintf("database=%s", templateDBName),
 		)
 
+		execHannibal(t,
+			"db", "migrate",
+			"--database-dsn", fmt.Sprintf("database=%s", templateDBName),
+			"--project-path", projectPath,
+		)
+
 		dbm.dbTemplateCreated = true
 	}
 
 	dbm.dbCount += 1
 	dbName := fmt.Sprintf("hannibal_test_%d", dbm.dbCount)
 
-	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("create database %s with template = %s", dbName, templateDBName))
+	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s", dbName))
+	require.NoError(t, err)
+	_, err = dbm.conn.Exec(ctx, fmt.Sprintf("create database %s with template = %s", dbName, templateDBName))
 	require.NoError(t, err)
 
 	return dbName
@@ -440,12 +448,12 @@ func readResponseBody(t *testing.T, r *http.Response) []byte {
 }
 
 func runHannibalDevelop(t *testing.T, originalProjectPath string) (*hannibalInstance, func()) {
-	testDB := dbManager.createInitializedDB(t)
-
 	appDir := t.TempDir()
 	projectPath := filepath.Join(appDir, "project")
 	err := copy.Copy(originalProjectPath, projectPath)
 	require.NoError(t, err)
+
+	testDB := dbManager.createInitializedDB(t, projectPath)
 
 	hi := &hannibalInstance{
 		dbName:      testDB,
@@ -462,7 +470,7 @@ func runHannibalDevelop(t *testing.T, originalProjectPath string) (*hannibalInst
 }
 
 func runHannibalServe(t *testing.T, projectPath string) (*hannibalInstance, func()) {
-	testDB := dbManager.createInitializedDB(t)
+	testDB := dbManager.createInitializedDB(t, projectPath)
 
 	appDir := t.TempDir()
 
@@ -489,8 +497,13 @@ func runHannibalServe(t *testing.T, projectPath string) (*hannibalInstance, func
 func TestMigrate(t *testing.T) {
 	t.Parallel()
 
-	testDB := dbManager.createInitializedDB(t)
+	testDB := dbManager.createEmptyDB(t)
 	defer dbManager.dropDB(t, testDB)
+
+	execHannibal(t,
+		"db", "init",
+		"--database-dsn", fmt.Sprintf("database=%s", testDB),
+	)
 
 	appDir := t.TempDir()
 	projectPath := filepath.Join(appDir, "project")
@@ -771,4 +784,25 @@ func TestCookieSession(t *testing.T) {
 		responseBody := string(readResponseBody(t, response))
 		assert.Contains(t, responseBody, fmt.Sprintf("%d times", i))
 	}
+}
+
+func TestPasswordDigest(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	apiClient := newAPIClient(t, hi.httpAddr)
+
+	response := apiClient.post(t, "/api/user/login", "application/json", []byte(`{"username": "jack", "password": "secret"}`))
+	require.EqualValues(t, http.StatusBadRequest, response.StatusCode)
+
+	response = apiClient.post(t, "/api/user/register", "application/json", []byte(`{"username": "jack", "password": "secret"}`))
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+
+	response = apiClient.post(t, "/api/user/login", "application/json", []byte(`{"username": "jack", "password": "secret"}`))
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+
+	response = apiClient.post(t, "/api/user/login", "application/json", []byte(`{"username": "jack", "password": "wrong"}`))
+	require.EqualValues(t, http.StatusBadRequest, response.StatusCode)
 }

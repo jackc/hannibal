@@ -15,14 +15,16 @@ type Config struct {
 }
 
 type Route struct {
-	GetPath    string `yaml:"get"`
-	PostPath   string `yaml:"post"`
-	PutPath    string `yaml:"put"`
-	PatchPath  string `yaml:"patch"`
-	DeletePath string `yaml:"delete"`
-	Path       string
-	Func       string
-	Params     []*RequestParam `yaml:"params"`
+	GetPath             string `yaml:"get"`
+	PostPath            string `yaml:"post"`
+	PutPath             string `yaml:"put"`
+	PatchPath           string `yaml:"patch"`
+	DeletePath          string `yaml:"delete"`
+	Path                string
+	Func                string
+	Params              []*RequestParam      `yaml:"params"`
+	DigestPassword      *DigestPassword      `yaml:"digest-password"`
+	CheckPasswordDigest *CheckPasswordDigest `yaml:"check-password-digest"`
 }
 
 type RequestParam struct {
@@ -33,6 +35,17 @@ type RequestParam struct {
 	TrimSpace    *bool           `yaml:"trim-space"`
 	Required     bool
 	NullifyEmpty bool `yaml:"nullify-empty"`
+}
+
+type DigestPassword struct {
+	PasswordParam string `yaml:"password-param"`
+	DigestParam   string `yaml:"digest-param"`
+}
+
+type CheckPasswordDigest struct {
+	PasswordParam         string `yaml:"password-param"`
+	ResultParam           string `yaml:"result-param"`
+	GetPasswordDigestFunc string `yaml:"get-password-digest-func"`
 }
 
 func (c *Config) Merge(other *Config) {
