@@ -28,6 +28,7 @@ var allowedOutArgs = []string{
 	"template",
 	"template_data",
 	"cookie_session",
+	"response_headers",
 }
 
 type PGFuncHandler struct {
@@ -168,6 +169,7 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var templateName pgtype.Text
 	var templateData map[string]interface{}
 	var responseCookieSession []byte
+	var responseHeaders map[string]string
 
 	err = db.App(ctx).QueryRow(ctx, h.SQL, sqlArgs...).Scan(
 		&status,
@@ -175,9 +177,16 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		&templateName,
 		&templateData,
 		&responseCookieSession,
+		&responseHeaders,
 	)
 	if err != nil {
 		panic(err)
+	}
+
+	if responseHeaders != nil {
+		for k, v := range responseHeaders {
+			w.Header().Add(k, v)
+		}
 	}
 
 	if status.Status == pgtype.Present {

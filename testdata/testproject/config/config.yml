@@ -59,3 +59,5 @@ routes:
               type: text
             - name: bar
               type: int
+  - get: /response_headers
+    func: http_response_headers

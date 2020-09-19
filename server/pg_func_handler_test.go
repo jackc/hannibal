@@ -23,7 +23,7 @@ func TestNewPGFuncHandler(t *testing.T) {
 			name:      "get_foo",
 			inArgMap:  map[string]struct{}{"args": {}},
 			outArgMap: map[string]struct{}{"resp_body": {}},
-			sql:       "select null as status, resp_body, null as template, null as template_data, null as cookie_session from get_foo(args => $1)",
+			sql:       "select null as status, resp_body, null as template, null as template_data, null as cookie_session, null as response_headers from get_foo(args => $1)",
 			inArgs:    []string{"args"},
 		},
 		{
@@ -31,7 +31,7 @@ func TestNewPGFuncHandler(t *testing.T) {
 			name:      "get_foo",
 			inArgMap:  map[string]struct{}{"args": {}},
 			outArgMap: map[string]struct{}{"resp_body": {}, "status": {}},
-			sql:       "select status, resp_body, null as template, null as template_data, null as cookie_session from get_foo(args => $1)",
+			sql:       "select status, resp_body, null as template, null as template_data, null as cookie_session, null as response_headers from get_foo(args => $1)",
 			inArgs:    []string{"args"},
 		},
 	} {

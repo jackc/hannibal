@@ -809,3 +809,15 @@ func TestPasswordDigest(t *testing.T) {
 	response = apiClient.post(t, "/api/user/login", "application/json", []byte(`{"username": "jack", "password": "wrong"}`))
 	require.EqualValues(t, http.StatusBadRequest, response.StatusCode)
 }
+
+func TestHTTPResponseHeaders(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	apiClient := newAPIClient(t, hi.httpAddr)
+	response := apiClient.get(t, "/response_headers")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "bar", response.Header.Get("foo"))
+}
