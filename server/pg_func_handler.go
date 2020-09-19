@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	"github.com/gorilla/csrf"
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgtype"
@@ -227,6 +228,12 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if tmpl == nil {
 			panic("template not found: " + templateName.String)
 		}
+
+		if templateData == nil {
+			templateData = make(map[string]interface{})
+		}
+		templateData["csrfField"] = csrf.TemplateField(r)
+
 		err := tmpl.Execute(w, templateData)
 		if err != nil {
 			panic(err)

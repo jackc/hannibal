@@ -821,3 +821,29 @@ func TestHTTPResponseHeaders(t *testing.T) {
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	assert.Equal(t, "bar", response.Header.Get("foo"))
 }
+
+func TestCSRFProtection(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	browser := newBrowser(t, hi.httpAddr)
+	response := browser.post(t, "/csrf_protection_disabled", "application/json", []byte(`{}`))
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+
+	browser = newBrowser(t, hi.httpAddr)
+	response = browser.post(t, "/csrf_protection_enabled", "application/json", []byte(`{}`))
+	require.EqualValues(t, http.StatusForbidden, response.StatusCode)
+
+	response = browser.get(t, "/get_csrf_token")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	match := regexp.MustCompile(`value="(.*)"`).FindStringSubmatch(responseBody)
+	require.NotNil(t, match)
+
+	form := url.Values{}
+	form.Add("gorilla.csrf.Token", match[1])
+	response = browser.post(t, "/csrf_protection_enabled", "application/x-www-form-urlencoded", []byte(form.Encode()))
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+}

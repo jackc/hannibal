@@ -11,20 +11,37 @@ import (
 )
 
 type Config struct {
-	Routes []Route
+	CSRFProtection *CSRFProtection `yaml:"csrf-protection"`
+	Routes         []Route
+}
+
+type CSRFProtection struct {
+	Disable        bool
+	CookieName     *string `yaml:"cookie-name"`
+	Domain         *string
+	FieldName      *string `yaml:"field-name"`
+	HTTPOnly       *bool   `yaml:"http-only"`
+	MaxAge         *int    `yaml:"max-age"`
+	Path           *string
+	RequestHeader  *string `yaml:"request-header"`
+	SameSite       *string `yaml:"same-site"`
+	Secure         *bool
+	TrustedOrigins []string `yaml:"trusted-origins"`
+	// TODO - error handler
 }
 
 type Route struct {
-	GetPath             string `yaml:"get"`
-	PostPath            string `yaml:"post"`
-	PutPath             string `yaml:"put"`
-	PatchPath           string `yaml:"patch"`
-	DeletePath          string `yaml:"delete"`
-	Path                string
-	Func                string
-	Params              []*RequestParam      `yaml:"params"`
-	DigestPassword      *DigestPassword      `yaml:"digest-password"`
-	CheckPasswordDigest *CheckPasswordDigest `yaml:"check-password-digest"`
+	GetPath               string `yaml:"get"`
+	PostPath              string `yaml:"post"`
+	PutPath               string `yaml:"put"`
+	PatchPath             string `yaml:"patch"`
+	DeletePath            string `yaml:"delete"`
+	Path                  string
+	Func                  string
+	DisableCSRFProtection bool                 `yaml:"disable-csrf-protection"`
+	Params                []*RequestParam      `yaml:"params"`
+	DigestPassword        *DigestPassword      `yaml:"digest-password"`
+	CheckPasswordDigest   *CheckPasswordDigest `yaml:"check-password-digest"`
 }
 
 type RequestParam struct {
@@ -49,6 +66,9 @@ type CheckPasswordDigest struct {
 }
 
 func (c *Config) Merge(other *Config) {
+	if other.CSRFProtection != nil {
+		c.CSRFProtection = other.CSRFProtection
+	}
 	c.Routes = append(c.Routes, other.Routes...)
 }
 

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,13 +12,20 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi"
+	"github.com/gorilla/csrf"
 	"github.com/jackc/hannibal/appconf"
+	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 )
 
-func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes []appconf.Route, tmpl *template.Template, host *Host, publicPath string) (http.Handler, error) {
+func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConfig *appconf.Config, tmpl *template.Template, host *Host, publicPath string) (http.Handler, error) {
+	csrfFunc, err := makeCSRFFunc(current.SecretKeyBase(ctx), appConfig.CSRFProtection)
+	if err != nil {
+		return nil, err
+	}
+
 	router := chi.NewRouter()
-	for _, r := range routes {
+	for _, r := range appConfig.Routes {
 		inArgs, outArgs, err := getSQLFuncArgs(ctx, dbconn, schema, r.Func)
 		if err != nil {
 			return nil, err
@@ -58,16 +66,23 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes 
 		h.RootTemplate = tmpl
 		h.Host = host
 
+		var handler http.Handler
+		if csrfFunc != nil && !r.DisableCSRFProtection {
+			handler = csrfFunc(h)
+		} else {
+			handler = h
+		}
+
 		if r.GetPath != "" {
-			router.Method(http.MethodGet, r.GetPath, h)
+			router.Method(http.MethodGet, r.GetPath, handler)
 		} else if r.PostPath != "" {
-			router.Method(http.MethodPost, r.PostPath, h)
+			router.Method(http.MethodPost, r.PostPath, handler)
 		} else if r.PutPath != "" {
-			router.Method(http.MethodPut, r.PutPath, h)
+			router.Method(http.MethodPut, r.PutPath, handler)
 		} else if r.PatchPath != "" {
-			router.Method(http.MethodPatch, r.PatchPath, h)
+			router.Method(http.MethodPatch, r.PatchPath, handler)
 		} else if r.DeletePath != "" {
-			router.Method(http.MethodDelete, r.DeletePath, h)
+			router.Method(http.MethodDelete, r.DeletePath, handler)
 		} else {
 			router.Handle(r.Path, h)
 		}
@@ -76,6 +91,66 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, routes 
 	router.NotFound(NewPublicFileHandler(publicPath).ServeHTTP)
 
 	return router, nil
+}
+
+func makeCSRFFunc(secretKeyBase string, csrfProtectionConfig *appconf.CSRFProtection) (func(http.Handler) http.Handler, error) {
+	if csrfProtectionConfig == nil {
+		csrfProtectionConfig = &appconf.CSRFProtection{}
+	}
+
+	if csrfProtectionConfig.Disable {
+		return nil, nil
+	}
+
+	options := []csrf.Option{}
+	if csrfProtectionConfig.CookieName != nil {
+		options = append(options, csrf.CookieName(*csrfProtectionConfig.CookieName))
+	}
+	if csrfProtectionConfig.Domain != nil {
+		options = append(options, csrf.Domain(*csrfProtectionConfig.Domain))
+	}
+	if csrfProtectionConfig.FieldName != nil {
+		options = append(options, csrf.FieldName(*csrfProtectionConfig.FieldName))
+	}
+	if csrfProtectionConfig.HTTPOnly != nil {
+		options = append(options, csrf.HttpOnly(*csrfProtectionConfig.HTTPOnly))
+	}
+	if csrfProtectionConfig.MaxAge != nil {
+		options = append(options, csrf.MaxAge(*csrfProtectionConfig.MaxAge))
+	}
+	if csrfProtectionConfig.Path != nil {
+		options = append(options, csrf.Path(*csrfProtectionConfig.Path))
+	}
+	if csrfProtectionConfig.RequestHeader != nil {
+		options = append(options, csrf.Path(*csrfProtectionConfig.RequestHeader))
+	}
+	if csrfProtectionConfig.SameSite != nil {
+		ssLowerStr := strings.ToLower(*csrfProtectionConfig.SameSite)
+		var ssm csrf.SameSiteMode
+		switch ssLowerStr {
+		case "none":
+			ssm = csrf.SameSiteNoneMode
+		case "lax":
+			ssm = csrf.SameSiteLaxMode
+		case "strict":
+			ssm = csrf.SameSiteStrictMode
+		default:
+			return nil, fmt.Errorf("bad csrf-protection.same-site value: %s", *csrfProtectionConfig.SameSite)
+		}
+
+		options = append(options, csrf.SameSite(ssm))
+	}
+	if csrfProtectionConfig.Secure != nil {
+		options = append(options, csrf.Secure(*csrfProtectionConfig.Secure))
+	}
+	if len(csrfProtectionConfig.TrustedOrigins) > 0 {
+		options = append(options, csrf.TrustedOrigins(csrfProtectionConfig.TrustedOrigins))
+	}
+
+	csrfKey := sha256.Sum256([]byte(secretKeyBase + "CSRF key"))
+	csrfFunc := csrf.Protect(csrfKey[:], options...)
+
+	return csrfFunc, nil
 }
 
 const (

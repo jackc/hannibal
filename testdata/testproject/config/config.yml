@@ -1,6 +1,9 @@
+csrf-protection:
+  secure: false # no SSL while testing
 routes:
   - post: /api/user/register
     func: http_api_register_user
+    disable-csrf-protection: true
     params:
       - name: username
         type: text
@@ -11,6 +14,7 @@ routes:
       digest-param: passwordDigest
   - post: /api/user/login
     func: http_api_login
+    disable-csrf-protection: true
     params:
       - name: username
         type: text
@@ -31,11 +35,13 @@ routes:
       - name: name
   - post: /api/hello
     func: api_hello
+    disable-csrf-protection: true
     params:
       - name: name
         nullify-empty: true
   - post: /api/arrays_and_objects
     func: api_arrays_and_objects
+    disable-csrf-protection: true
     params:
       - name: untypedArray
         type: array
@@ -61,3 +67,10 @@ routes:
               type: int
   - get: /response_headers
     func: http_response_headers
+  - get: /get_csrf_token
+    func: http_get_csrf_token
+  - post: /csrf_protection_enabled
+    func: hello
+  - post: /csrf_protection_disabled
+    func: hello
+    disable-csrf-protection: true

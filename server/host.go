@@ -112,7 +112,7 @@ func (h *Host) Load(ctx context.Context, projectPath string) error {
 		return err
 	}
 
-	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig.Routes, rootTmpl, h, filepath.Join(projectPath, "public"))
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig, rootTmpl, h, filepath.Join(projectPath, "public"))
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig.Routes, rootTmpl, h, filepath.Join(currentPath, "public"))
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig, rootTmpl, h, filepath.Join(currentPath, "public"))
 	if err != nil {
 		current.Logger(ctx).Error().Caller().Err(err).Send()
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
