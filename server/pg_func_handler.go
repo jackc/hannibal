@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -189,30 +190,25 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if responseCookieSession != nil {
-		encoded, err := h.Host.secureCookie.Encode("hannibal-session", responseCookieSession)
-		if err != nil {
-			panic(err)
-		}
-
+	// Only send session cookie response if it has changed from the request.
+	if bytes.Compare(requestCookieSession, responseCookieSession) != 0 {
 		cookie := &http.Cookie{
 			Name:     "hannibal-session",
-			Value:    encoded,
 			Path:     "/",
 			Secure:   false, // TODO - false in dev mode -- configurable in production
 			HttpOnly: true,
 		}
-		http.SetCookie(w, cookie)
 
-	} else if responseCookieSession != nil {
-		cookie := &http.Cookie{
-			Name:     "hannibal-session",
-			Value:    "",
-			Path:     "/",
-			Secure:   false, // TODO - false in dev mode -- configurable in production
-			HttpOnly: true,
-			Expires:  time.Unix(0, 0),
+		if responseCookieSession != nil {
+			encoded, err := h.Host.secureCookie.Encode("hannibal-session", responseCookieSession)
+			if err != nil {
+				panic(err)
+			}
+			cookie.Value = encoded
+		} else {
+			cookie.Expires = time.Unix(0, 0)
 		}
+
 		http.SetCookie(w, cookie)
 	}
 
