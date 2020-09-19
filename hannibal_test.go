@@ -122,7 +122,10 @@ func (dbm *dbManagerT) createEmptyDB(t *testing.T) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("create database %s", dbName))
+	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s", dbName))
+	require.NoError(t, err)
+
+	_, err = dbm.conn.Exec(ctx, fmt.Sprintf("create database %s", dbName))
 	require.NoError(t, err)
 
 	return dbName
