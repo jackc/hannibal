@@ -19,7 +19,7 @@ import (
 )
 
 func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConfig *appconf.Config, tmpl *template.Template, host *Host, publicPath string) (http.Handler, error) {
-	csrfFunc, err := makeCSRFFunc(current.SecretKeyBase(ctx), appConfig.CSRFProtection)
+	csrfFunc, err := makeCSRFFunc(ctx, dbconn, schema, appConfig.CSRFProtection, tmpl, host)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 	return router, nil
 }
 
-func makeCSRFFunc(secretKeyBase string, csrfProtectionConfig *appconf.CSRFProtection) (func(http.Handler) http.Handler, error) {
+func makeCSRFFunc(ctx context.Context, dbconn db.DBConn, schema string, csrfProtectionConfig *appconf.CSRFProtection, tmpl *template.Template, host *Host) (func(http.Handler) http.Handler, error) {
 	if csrfProtectionConfig == nil {
 		csrfProtectionConfig = &appconf.CSRFProtection{}
 	}
@@ -108,6 +108,23 @@ func makeCSRFFunc(secretKeyBase string, csrfProtectionConfig *appconf.CSRFProtec
 	}
 	if csrfProtectionConfig.Domain != nil {
 		options = append(options, csrf.Domain(*csrfProtectionConfig.Domain))
+	}
+	if csrfProtectionConfig.ErrorFunc != nil {
+		errorFunc := *csrfProtectionConfig.ErrorFunc
+		inArgs, outArgs, err := getSQLFuncArgs(ctx, dbconn, schema, errorFunc)
+		if err != nil {
+			return nil, err
+		}
+
+		h, err := NewPGFuncHandler(errorFunc, inArgs, outArgs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build handler for function %s: %v", errorFunc, err)
+		}
+
+		h.RootTemplate = tmpl
+		h.Host = host
+
+		options = append(options, csrf.ErrorHandler(h))
 	}
 	if csrfProtectionConfig.FieldName != nil {
 		options = append(options, csrf.FieldName(*csrfProtectionConfig.FieldName))
@@ -147,7 +164,7 @@ func makeCSRFFunc(secretKeyBase string, csrfProtectionConfig *appconf.CSRFProtec
 		options = append(options, csrf.TrustedOrigins(csrfProtectionConfig.TrustedOrigins))
 	}
 
-	csrfKey := sha256.Sum256([]byte(secretKeyBase + "CSRF key"))
+	csrfKey := sha256.Sum256([]byte(current.SecretKeyBase(ctx) + "CSRF key"))
 	csrfFunc := csrf.Protect(csrfKey[:], options...)
 
 	return csrfFunc, nil

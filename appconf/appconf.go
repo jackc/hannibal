@@ -27,7 +27,7 @@ type CSRFProtection struct {
 	SameSite       *string `yaml:"same-site"`
 	Secure         *bool
 	TrustedOrigins []string `yaml:"trusted-origins"`
-	// TODO - error handler
+	ErrorFunc      *string  `yaml:"error-func"`
 }
 
 type Route struct {

@@ -835,10 +835,12 @@ func TestCSRFProtection(t *testing.T) {
 	browser = newBrowser(t, hi.httpAddr)
 	response = browser.post(t, "/csrf_protection_enabled", "application/json", []byte(`{}`))
 	require.EqualValues(t, http.StatusForbidden, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Custom CRSF failure message.")
 
 	response = browser.get(t, "/get_csrf_token")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
-	responseBody := string(readResponseBody(t, response))
+	responseBody = string(readResponseBody(t, response))
 	match := regexp.MustCompile(`value="(.*)"`).FindStringSubmatch(responseBody)
 	require.NotNil(t, match)
 

@@ -1,5 +1,6 @@
 csrf-protection:
   secure: false # no SSL while testing
+  error-func: http_handle_csrf_failure
 routes:
   - post: /api/user/register
     func: http_api_register_user
