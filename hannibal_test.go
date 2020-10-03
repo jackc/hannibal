@@ -774,6 +774,22 @@ func TestJSONArrayAndObjectArgs(t *testing.T) {
 	assert.Equal(t, expectedResult, responseData)
 }
 
+func TestArgErrors(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	apiClient := newAPIClient(t, hi.httpAddr)
+	response := apiClient.post(t, "/api/todos", "application/json", []byte(`{"name": ""}`))
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
+	var responseData map[string]interface{}
+	err := json.Unmarshal(readResponseBody(t, response), &responseData)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"error": map[string]interface{}{"name": "missing"}}, responseData)
+}
+
 func TestCookieSession(t *testing.T) {
 	t.Parallel()
 

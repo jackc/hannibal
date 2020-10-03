@@ -25,6 +25,14 @@ routes:
       password-param: password
       result-param: validPassword
       get-password-digest-func: get_user_password_digest
+  - post: /api/todos
+    func: http_api_create_todo
+    disable-csrf-protection: true
+    params:
+      - name: name
+        type: text
+        required: true
+        nullify-empty: true
   - path: /hello
     func: hello
     params:
