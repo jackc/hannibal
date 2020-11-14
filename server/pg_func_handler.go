@@ -197,16 +197,6 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if status.Status == pgtype.Present {
-		w.WriteHeader(int(status.Int))
-	}
-
-	if respBody != nil {
-		w.Header().Add("Content-Type", "application/json")
-		w.Write(respBody)
-		return
-	}
-
 	// Only send session cookie response if it has changed from the request.
 	if bytes.Compare(requestCookieSession, responseCookieSession) != 0 {
 		cookie := &http.Cookie{
@@ -227,6 +217,16 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		http.SetCookie(w, cookie)
+	}
+
+	if status.Status == pgtype.Present {
+		w.WriteHeader(int(status.Int))
+	}
+
+	if respBody != nil {
+		w.Header().Add("Content-Type", "application/json")
+		w.Write(respBody)
+		return
 	}
 
 	if templateName.Status == pgtype.Present {
