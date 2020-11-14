@@ -3,6 +3,7 @@ module github.com/jackc/hannibal
 go 1.15
 
 require (
+	github.com/Masterminds/sprig/v3 v3.1.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/gofrs/uuid v3.3.0+incompatible // indirect

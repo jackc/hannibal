@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/gorilla/securecookie"
 	"github.com/jackc/hannibal/appconf"
 	"github.com/jackc/hannibal/current"
@@ -278,7 +279,7 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 }
 
 func loadTemplates(rootPath string) (*template.Template, error) {
-	rootTmpl := template.New("root")
+	rootTmpl := template.New("root").Funcs(sprig.HtmlFuncMap())
 
 	walkFunc := func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
