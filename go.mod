@@ -8,6 +8,7 @@ require (
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/gofrs/uuid v3.3.0+incompatible // indirect
 	github.com/gorilla/csrf v1.7.0
+	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/securecookie v1.1.1
 	github.com/jackc/pgconn v1.7.2
 	github.com/jackc/pgtype v1.6.1

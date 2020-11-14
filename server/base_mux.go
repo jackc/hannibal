@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/gorilla/handlers"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
@@ -15,6 +16,8 @@ func BaseMux(log zerolog.Logger) *chi.Mux {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+
+	r.Use(handlers.HTTPMethodOverrideHandler)
 
 	r.Use(hlog.NewHandler(log))
 	r.Use(hlog.RequestIDHandler("request_id", "x-request-id"))
