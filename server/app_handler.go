@@ -139,7 +139,7 @@ func makeCSRFFunc(ctx context.Context, dbconn db.DBConn, schema string, csrfProt
 		options = append(options, csrf.Path(*csrfProtectionConfig.Path))
 	}
 	if csrfProtectionConfig.RequestHeader != nil {
-		options = append(options, csrf.Path(*csrfProtectionConfig.RequestHeader))
+		options = append(options, csrf.RequestHeader(*csrfProtectionConfig.RequestHeader))
 	}
 	if csrfProtectionConfig.SameSite != nil {
 		ssLowerStr := strings.ToLower(*csrfProtectionConfig.SameSite)
