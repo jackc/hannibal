@@ -1,12 +1,11 @@
 create function http_api_create_todo(
   args jsonb,
-  arg_errors jsonb,
   out resp_body jsonb
 )
 language plpgsql as $$
 begin
-  if arg_errors is not null then
-    resp_body = jsonb_build_object('error', arg_errors);
+  if args -> '__errors__' is not null then
+    resp_body = jsonb_build_object('error', args -> '__errors__');
     return;
   end if;
 

@@ -20,7 +20,6 @@ import (
 
 var allowedInArgs = []string{
 	"args",
-	"arg_errors",
 	"cookie_session",
 }
 
@@ -39,7 +38,6 @@ type PGFuncHandler struct {
 	CheckPasswordDigest *CheckPasswordDigest
 	SQL                 string
 	FuncInArgs          []string
-	argErrors           bool
 	RootTemplate        *template.Template
 	Host                *Host
 }
@@ -99,17 +97,10 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				argErrors[qp.Name] = err.Error()
 			}
 		}
-	}
 
-	if !h.argErrors && len(argErrors) != 0 {
-		response, err := json.Marshal(map[string]interface{}{"errors": argErrors})
-		if err != nil {
-			panic(err) // cannot happen
+		if argErrors != nil {
+			queryArgs["__errors__"] = argErrors
 		}
-
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		w.Write(response)
-		return
 	}
 
 	// Read the cookie session. Ignore any errors and treat as missing.
@@ -165,8 +156,6 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch ia {
 		case "args":
 			sqlArgs = append(sqlArgs, queryArgs)
-		case "arg_errors":
-			sqlArgs = append(sqlArgs, argErrors)
 		case "cookie_session":
 			sqlArgs = append(sqlArgs, requestCookieSession)
 		}
@@ -261,11 +250,6 @@ func NewPGFuncHandler(name string, inArgMap map[string]struct{}, outArgMap map[s
 		}
 	}
 
-	argErrors := false
-	if _, ok := inArgMap["arg_errors"]; ok {
-		argErrors = true
-	}
-
 	inArgs := make([]string, 0, len(inArgMap))
 	// Allowed input arguments in order.
 	for _, a := range allowedInArgs {
@@ -316,7 +300,6 @@ func NewPGFuncHandler(name string, inArgMap map[string]struct{}, outArgMap map[s
 	h := &PGFuncHandler{
 		SQL:        sb.String(),
 		FuncInArgs: inArgs,
-		argErrors:  argErrors,
 	}
 
 	return h, nil
