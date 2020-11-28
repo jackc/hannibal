@@ -2,10 +2,12 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -42,6 +44,12 @@ type PGFuncHandler struct {
 	Host                *Host
 }
 
+type uploadedFile struct {
+	Filename string `json:"filename"`
+	Size     int64  `json:"size"`
+	Body     string `json:"body"`
+}
+
 func extractRawArgs(r *http.Request) (map[string]interface{}, error) {
 	rawArgs := make(map[string]interface{})
 	for key, values := range r.URL.Query() {
@@ -53,21 +61,56 @@ func extractRawArgs(r *http.Request) (map[string]interface{}, error) {
 		rawArgs[routeParams.Keys[i]] = routeParams.Values[i]
 	}
 
-	switch r.Header.Get("Content-Type") {
-	case "application/json":
+	contentType := r.Header.Get("Content-Type")
+	switch {
+	case contentType == "application/json":
 		decoder := json.NewDecoder(r.Body)
 		decoder.UseNumber()
 		err := decoder.Decode(&rawArgs)
 		if err != nil {
 			return nil, err
 		}
-	case "application/x-www-form-urlencoded":
+	case contentType == "application/x-www-form-urlencoded":
 		err := r.ParseForm()
 		if err != nil {
 			return nil, err
 		}
 		for key, values := range r.PostForm {
 			rawArgs[key] = values[0]
+		}
+	case strings.HasPrefix(contentType, "multipart/form-data"):
+		err := r.ParseMultipartForm(5 * 1024 * 1024)
+		if err != nil {
+			return nil, err
+		}
+		for key, values := range r.MultipartForm.Value {
+			rawArgs[key] = values[0]
+		}
+
+		// File support is experimental. It encodes the body of the file in base64. It's not clear that this is a good
+		// idea as opposed to requiring the use of an external handler.
+		//
+		// To decode in PostgreSQL use decode and convert_from functions:
+		// decode(args -> 'file' ->> 'body', 'base64') --> decoded bytes
+		// convert_from(decode(args -> 'file' ->> 'body', 'base64'), 'UTF8') --> decoded bytes converted to text
+		for key, values := range r.MultipartForm.File {
+			fileBody, err := func() ([]byte, error) {
+				mpFile, err := values[0].Open()
+				if err != nil {
+					return nil, err
+				}
+				defer mpFile.Close()
+				return ioutil.ReadAll(mpFile)
+			}()
+			if err != nil {
+				return nil, err
+			}
+
+			rawArgs[key] = &uploadedFile{
+				Filename: values[0].Filename,
+				Size:     values[0].Size,
+				Body:     base64.StdEncoding.EncodeToString(fileBody),
+			}
 		}
 	}
 

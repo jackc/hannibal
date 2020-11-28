@@ -178,6 +178,7 @@ const (
 	RequestParamTypeBigint
 	RequestParamTypeArray
 	RequestParamTypeObject
+	RequestParamTypeFile
 )
 
 type RequestParam struct {
@@ -208,6 +209,8 @@ func requestParamFromAppConfig(acrp *appconf.RequestParam) (*RequestParam, error
 		rp.Type = RequestParamTypeArray
 	case "object":
 		rp.Type = RequestParamTypeObject
+	case "file":
+		rp.Type = RequestParamTypeFile
 	default:
 		return nil, fmt.Errorf("param %s has unknown type: %s", acrp.Name, acrp.Type)
 	}
@@ -401,6 +404,12 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 		default:
 			return nil, fmt.Errorf("%s: cannot convert %v to object", rp.Name, value)
 		}
+
+	case RequestParamTypeFile:
+		if _, ok := value.(*uploadedFile); ok {
+			return value, nil
+		}
+		return nil, fmt.Errorf("%s: %v is not a file", rp.Name, value)
 
 	default:
 		return nil, fmt.Errorf("unknown param type %v", rp.Type)
