@@ -137,6 +137,8 @@ func makeCSRFFunc(ctx context.Context, dbconn db.DBConn, schema string, csrfProt
 	}
 	if csrfProtectionConfig.Path != nil {
 		options = append(options, csrf.Path(*csrfProtectionConfig.Path))
+	} else {
+		options = append(options, csrf.Path("/"))
 	}
 	if csrfProtectionConfig.RequestHeader != nil {
 		options = append(options, csrf.RequestHeader(*csrfProtectionConfig.RequestHeader))
