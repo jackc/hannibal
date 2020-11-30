@@ -18,6 +18,59 @@ import (
 	"github.com/jackc/hannibal/db"
 )
 
+func routeHasOnePath(r appconf.Route) bool {
+	count := 0
+	if r.GetPath != "" {
+		count++
+	}
+	if r.PostPath != "" {
+		count++
+	}
+	if r.PutPath != "" {
+		count++
+	}
+	if r.PatchPath != "" {
+		count++
+	}
+	if r.DeletePath != "" {
+		count++
+	}
+	if r.Path != "" {
+		count++
+	}
+	return count == 1
+}
+
+func routeHasOneHandler(r appconf.Route) bool {
+	count := 0
+	if r.Func != "" {
+		count++
+	}
+	if r.ReverseProxy != "" {
+		count++
+	}
+	return count == 1
+}
+
+func routeName(r appconf.Route) string {
+	if r.GetPath != "" {
+		return fmt.Sprintf("GET %s", r.GetPath)
+	}
+	if r.PostPath != "" {
+		return fmt.Sprintf("POST %s", r.PostPath)
+	}
+	if r.PutPath != "" {
+		return fmt.Sprintf("PUT %s", r.PutPath)
+	}
+	if r.PatchPath != "" {
+		return fmt.Sprintf("PATCH %s", r.PatchPath)
+	}
+	if r.DeletePath != "" {
+		return fmt.Sprintf("DELETE %s", r.DeletePath)
+	}
+	return r.Path
+}
+
 func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConfig *appconf.Config, tmpl *template.Template, host *Host, publicPath string) (http.Handler, error) {
 	csrfFunc, err := makeCSRFFunc(ctx, dbconn, schema, appConfig.CSRFProtection, tmpl, host)
 	if err != nil {
@@ -26,51 +79,66 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 
 	router := chi.NewRouter()
 	for _, r := range appConfig.Routes {
-		inArgs, outArgs, err := getSQLFuncArgs(ctx, dbconn, schema, r.Func)
-		if err != nil {
-			return nil, err
+		if !routeHasOnePath(r) {
+			return nil, fmt.Errorf("route must have exactly one of path, get, post, put, patch, and delete")
 		}
 
-		h, err := NewPGFuncHandler(r.Func, inArgs, outArgs)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build handler for function %s: %v", r.Func, err)
+		if !routeHasOneHandler(r) {
+			return nil, fmt.Errorf("route %s: must have exactly one of func and reverse-proxy", routeName(r))
 		}
-
-		h.Params = make([]*RequestParam, len(r.Params))
-		for i, qp := range r.Params {
-			var err error
-			h.Params[i], err = requestParamFromAppConfig(qp)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert request param %s: %v", qp.Name, err)
-			}
-		}
-
-		if r.DigestPassword != nil {
-			h.DigestPassword = &DigestPassword{
-				PasswordParam: r.DigestPassword.PasswordParam,
-				DigestParam:   r.DigestPassword.DigestParam,
-			}
-		}
-
-		if r.CheckPasswordDigest != nil {
-			inArgs, _, err := getSQLFuncArgs(ctx, dbconn, schema, r.CheckPasswordDigest.GetPasswordDigestFunc)
-			if err != nil {
-				return nil, err
-			}
-
-			h.CheckPasswordDigest, err = newCheckPasswordDigest(r.CheckPasswordDigest.GetPasswordDigestFunc, inArgs)
-			h.CheckPasswordDigest.PasswordParam = r.CheckPasswordDigest.PasswordParam
-			h.CheckPasswordDigest.ResultParam = r.CheckPasswordDigest.ResultParam
-		}
-
-		h.RootTemplate = tmpl
-		h.Host = host
 
 		var handler http.Handler
-		if csrfFunc != nil && !r.DisableCSRFProtection {
-			handler = csrfFunc(h)
+
+		if r.Func != "" {
+			inArgs, outArgs, err := getSQLFuncArgs(ctx, dbconn, schema, r.Func)
+			if err != nil {
+				return nil, fmt.Errorf("route %s: %v", routeName(r), err)
+			}
+
+			pgFuncHandler, err := NewPGFuncHandler(r.Func, inArgs, outArgs)
+			if err != nil {
+				return nil, fmt.Errorf("route %s: failed to build handler for function %s: %v", routeName(r), r.Func, err)
+			}
+
+			pgFuncHandler.Params = make([]*RequestParam, len(r.Params))
+			for i, qp := range r.Params {
+				var err error
+				pgFuncHandler.Params[i], err = requestParamFromAppConfig(qp)
+				if err != nil {
+					return nil, fmt.Errorf("route %s: failed to convert request param %s: %v", routeName(r), qp.Name, err)
+				}
+			}
+
+			if r.DigestPassword != nil {
+				pgFuncHandler.DigestPassword = &DigestPassword{
+					PasswordParam: r.DigestPassword.PasswordParam,
+					DigestParam:   r.DigestPassword.DigestParam,
+				}
+			}
+
+			if r.CheckPasswordDigest != nil {
+				inArgs, _, err := getSQLFuncArgs(ctx, dbconn, schema, r.CheckPasswordDigest.GetPasswordDigestFunc)
+				if err != nil {
+					return nil, fmt.Errorf("route %s:, %v", routeName(r), err)
+				}
+
+				pgFuncHandler.CheckPasswordDigest, err = newCheckPasswordDigest(r.CheckPasswordDigest.GetPasswordDigestFunc, inArgs)
+				pgFuncHandler.CheckPasswordDigest.PasswordParam = r.CheckPasswordDigest.PasswordParam
+				pgFuncHandler.CheckPasswordDigest.ResultParam = r.CheckPasswordDigest.ResultParam
+			}
+
+			pgFuncHandler.RootTemplate = tmpl
+			pgFuncHandler.Host = host
+
+			if csrfFunc != nil && !r.DisableCSRFProtection {
+				handler = csrfFunc(pgFuncHandler)
+			} else {
+				handler = pgFuncHandler
+			}
+		} else if r.ReverseProxy != "" {
+			handler = &reverseProxy{}
 		} else {
-			handler = h
+			panic("no handler config") // This should be unreachable due to routeHasOneHandler check above.
 		}
 
 		if r.GetPath != "" {
@@ -84,7 +152,7 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 		} else if r.DeletePath != "" {
 			router.Method(http.MethodDelete, r.DeletePath, handler)
 		} else {
-			router.Handle(r.Path, h)
+			router.Handle(r.Path, handler)
 		}
 	}
 

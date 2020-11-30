@@ -684,11 +684,19 @@ func TestFormArgs(t *testing.T) {
 	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-	form := url.Values{}
-	form.Add("name", "Jack")
-	response := browser.post(t, "/hello", "application/x-www-form-urlencoded", []byte(form.Encode()))
+
+	response := browser.get(t, "/get_csrf_token")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
+	match := regexp.MustCompile(`value="(.*)"`).FindStringSubmatch(responseBody)
+	require.NotNil(t, match)
+
+	form := url.Values{}
+	form.Add("gorilla.csrf.Token", match[1])
+	form.Add("name", "Jack")
+	response = browser.post(t, "/hello", "application/x-www-form-urlencoded", []byte(form.Encode()))
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody = string(readResponseBody(t, response))
 	assert.Contains(t, responseBody, "Hello, Jack")
 }
 

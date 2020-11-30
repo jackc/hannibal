@@ -83,3 +83,5 @@ routes:
   - post: /csrf_protection_disabled
     func: hello
     disable-csrf-protection: true
+  - path: /reverse_proxy
+    reverse-proxy: http://127.0.0.1:3456

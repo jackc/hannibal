@@ -38,6 +38,7 @@ type Route struct {
 	DeletePath            string `yaml:"delete"`
 	Path                  string
 	Func                  string
+	ReverseProxy          string               `yaml:"reverse-proxy"`
 	DisableCSRFProtection bool                 `yaml:"disable-csrf-protection"`
 	Params                []*RequestParam      `yaml:"params"`
 	DigestPassword        *DigestPassword      `yaml:"digest-password"`
