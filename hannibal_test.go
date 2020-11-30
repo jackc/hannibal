@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 		defer cancel()
 
 		templateDBName := "hannibal_test_template"
-		_, err := dbManager.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s", templateDBName))
+		_, err := dbManager.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s with (force)", templateDBName))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to remove template database %s: %v", templateDBName, err)
 		}
@@ -80,7 +80,7 @@ func (dbm *dbManagerT) createInitializedDB(t *testing.T, projectPath string) str
 
 	templateDBName := "hannibal_test_template"
 	if !dbm.dbTemplateCreated {
-		_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s", templateDBName))
+		_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s with (force)", templateDBName))
 		require.NoError(t, err)
 
 		_, err = dbm.conn.Exec(ctx, fmt.Sprintf("create database %s", templateDBName))
@@ -103,7 +103,7 @@ func (dbm *dbManagerT) createInitializedDB(t *testing.T, projectPath string) str
 	dbm.dbCount += 1
 	dbName := fmt.Sprintf("hannibal_test_%d", dbm.dbCount)
 
-	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s", dbName))
+	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s with (force)", dbName))
 	require.NoError(t, err)
 	_, err = dbm.conn.Exec(ctx, fmt.Sprintf("create database %s with template = %s", dbName, templateDBName))
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func (dbm *dbManagerT) createEmptyDB(t *testing.T) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s", dbName))
+	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database if exists %s with (force)", dbName))
 	require.NoError(t, err)
 
 	_, err = dbm.conn.Exec(ctx, fmt.Sprintf("create database %s", dbName))
@@ -139,7 +139,7 @@ func (dbm *dbManagerT) dropDB(t *testing.T, dbName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database %s", dbName))
+	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database %s with (force)", dbName))
 	require.NoError(t, err)
 }
 
