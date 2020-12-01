@@ -424,29 +424,12 @@ func (b *browser) getCSRFToken(t *testing.T) string {
 	return match[1]
 }
 
-type apiClient struct {
-	serverAddr string
-	client     *http.Client
-}
-
-func newAPIClient(t *testing.T, serverAddr string) *apiClient {
+func newAPIClient(t *testing.T, serverAddr string) *browser {
 	client := &http.Client{}
-	return &apiClient{
+	return &browser{
 		serverAddr: serverAddr,
 		client:     client,
 	}
-}
-
-func (c *apiClient) get(t *testing.T, queryPath string) *http.Response {
-	response, err := c.client.Get(fmt.Sprintf(`http://%s%s`, c.serverAddr, queryPath))
-	require.NoError(t, err)
-	return response
-}
-
-func (c *apiClient) post(t *testing.T, queryPath string, contentType string, body []byte) *http.Response {
-	response, err := c.client.Post(fmt.Sprintf(`http://%s%s`, c.serverAddr, queryPath), contentType, bytes.NewReader(body))
-	require.NoError(t, err)
-	return response
 }
 
 func readResponseBody(t *testing.T, r *http.Response) []byte {
