@@ -417,7 +417,15 @@ func (b *browser) post(t *testing.T, queryPath string, contentType string, body 
 }
 
 func (b *browser) postJSONBytes(t *testing.T, queryPath string, body []byte) *http.Response {
-	response, err := b.client.Post(fmt.Sprintf(`http://%s%s`, b.serverAddr, queryPath), "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", fmt.Sprintf(`http://%s%s`, b.serverAddr, queryPath), bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Add("Content-Type", "application/json")
+
+	if b.csrfToken != "" {
+		req.Header.Add("X-CSRF-Token", b.csrfToken)
+	}
+
+	response, err := b.client.Do(req)
 	require.NoError(t, err)
 	return response
 }
