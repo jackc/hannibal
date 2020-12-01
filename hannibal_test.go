@@ -387,6 +387,7 @@ func spawnHannibal(t *testing.T, args ...string) *hannibalProcess {
 type browser struct {
 	serverAddr string
 	client     *http.Client
+	csrfToken  string
 }
 
 func newBrowser(t *testing.T, serverAddr string) *browser {
@@ -415,13 +416,13 @@ func (b *browser) post(t *testing.T, queryPath string, contentType string, body 
 	return response
 }
 
-func (b *browser) getCSRFToken(t *testing.T) string {
+func (b *browser) getCSRFToken(t *testing.T) {
 	response := b.get(t, "/get_csrf_token")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
 	match := regexp.MustCompile(`value="(.*)"`).FindStringSubmatch(responseBody)
 	require.NotNil(t, match)
-	return match[1]
+	b.csrfToken = match[1]
 }
 
 func newAPIClient(t *testing.T, serverAddr string) *browser {
@@ -676,10 +677,10 @@ func TestFormArgs(t *testing.T) {
 	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-	csrfToken := browser.getCSRFToken(t)
+	browser.getCSRFToken(t)
 
 	form := url.Values{}
-	form.Add("gorilla.csrf.Token", csrfToken)
+	form.Add("gorilla.csrf.Token", browser.csrfToken)
 	form.Add("name", "Jack")
 	response := browser.post(t, "/hello", "application/x-www-form-urlencoded", []byte(form.Encode()))
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
