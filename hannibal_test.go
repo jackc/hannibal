@@ -415,6 +415,15 @@ func (b *browser) post(t *testing.T, queryPath string, contentType string, body 
 	return response
 }
 
+func (b *browser) getCSRFToken(t *testing.T) string {
+	response := b.get(t, "/get_csrf_token")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	match := regexp.MustCompile(`value="(.*)"`).FindStringSubmatch(responseBody)
+	require.NotNil(t, match)
+	return match[1]
+}
+
 type apiClient struct {
 	serverAddr string
 	client     *http.Client
@@ -684,19 +693,14 @@ func TestFormArgs(t *testing.T) {
 	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-
-	response := browser.get(t, "/get_csrf_token")
-	require.EqualValues(t, http.StatusOK, response.StatusCode)
-	responseBody := string(readResponseBody(t, response))
-	match := regexp.MustCompile(`value="(.*)"`).FindStringSubmatch(responseBody)
-	require.NotNil(t, match)
+	csrfToken := browser.getCSRFToken(t)
 
 	form := url.Values{}
-	form.Add("gorilla.csrf.Token", match[1])
+	form.Add("gorilla.csrf.Token", csrfToken)
 	form.Add("name", "Jack")
-	response = browser.post(t, "/hello", "application/x-www-form-urlencoded", []byte(form.Encode()))
+	response := browser.post(t, "/hello", "application/x-www-form-urlencoded", []byte(form.Encode()))
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
-	responseBody = string(readResponseBody(t, response))
+	responseBody := string(readResponseBody(t, response))
 	assert.Contains(t, responseBody, "Hello, Jack")
 }
 
@@ -875,12 +879,11 @@ func TestCSRFProtection(t *testing.T) {
 }
 
 func TestReverseProxy(t *testing.T) {
-	t.Parallel()
-
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
 
-	cmd := exec.Command(filepath.Join("tmp", "test", "bin", "http_server"))
+	port := "3456"
+	cmd := exec.Command(filepath.Join("tmp", "test", "bin", "http_server"), port)
 	err := cmd.Start()
 	require.NoError(t, err)
 	defer func() {
@@ -890,7 +893,7 @@ func TestReverseProxy(t *testing.T) {
 		require.EqualError(t, err, "signal: killed")
 	}()
 
-	waitForListeningTCPServer(t, "127.0.0.1:3456")
+	waitForListeningTCPServer(t, fmt.Sprintf("127.0.0.1:%s", port))
 
 	browser := newBrowser(t, hi.httpAddr)
 	response := browser.get(t, "/reverse_proxy/hello")
