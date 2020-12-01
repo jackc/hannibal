@@ -416,6 +416,16 @@ func (b *browser) post(t *testing.T, queryPath string, contentType string, body 
 	return response
 }
 
+func (b *browser) postJSONBytes(t *testing.T, queryPath string, body []byte) *http.Response {
+	response, err := b.client.Post(fmt.Sprintf(`http://%s%s`, b.serverAddr, queryPath), "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	return response
+}
+
+func (b *browser) postJSONString(t *testing.T, queryPath string, body string) *http.Response {
+	return b.postJSONBytes(t, queryPath, []byte(body))
+}
+
 func (b *browser) getCSRFToken(t *testing.T) {
 	response := b.get(t, "/get_csrf_token")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
@@ -706,7 +716,7 @@ func TestJSONBodyArgs(t *testing.T) {
 	defer cleanup()
 
 	apiClient := newAPIClient(t, hi.httpAddr)
-	response := apiClient.post(t, "/api/hello", "application/json", []byte(`{"name": "Jack"}`))
+	response := apiClient.postJSONString(t, "/api/hello", `{"name": "Jack"}`)
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
 	var responseData map[string]interface{}
@@ -761,7 +771,7 @@ func TestJSONArrayAndObjectArgs(t *testing.T) {
 	requestBody, err := json.Marshal(requestData)
 	require.NoError(t, err)
 
-	response := apiClient.post(t, "/api/arrays_and_objects", "application/json", requestBody)
+	response := apiClient.postJSONBytes(t, "/api/arrays_and_objects", requestBody)
 	assert.EqualValues(t, http.StatusOK, response.StatusCode)
 	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
 	var responseData map[string]interface{}
@@ -777,7 +787,7 @@ func TestArgErrors(t *testing.T) {
 	defer cleanup()
 
 	apiClient := newAPIClient(t, hi.httpAddr)
-	response := apiClient.post(t, "/api/todos", "application/json", []byte(`{"name": ""}`))
+	response := apiClient.postJSONString(t, "/api/todos", `{"name": ""}`)
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
 	var responseData map[string]interface{}
@@ -809,16 +819,16 @@ func TestPasswordDigest(t *testing.T) {
 
 	apiClient := newAPIClient(t, hi.httpAddr)
 
-	response := apiClient.post(t, "/api/user/login", "application/json", []byte(`{"username": "jack", "password": "secret"}`))
+	response := apiClient.postJSONString(t, "/api/user/login", `{"username": "jack", "password": "secret"}`)
 	require.EqualValues(t, http.StatusBadRequest, response.StatusCode)
 
-	response = apiClient.post(t, "/api/user/register", "application/json", []byte(`{"username": "jack", "password": "secret"}`))
+	response = apiClient.postJSONString(t, "/api/user/register", `{"username": "jack", "password": "secret"}`)
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 
-	response = apiClient.post(t, "/api/user/login", "application/json", []byte(`{"username": "jack", "password": "secret"}`))
+	response = apiClient.postJSONString(t, "/api/user/login", `{"username": "jack", "password": "secret"}`)
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 
-	response = apiClient.post(t, "/api/user/login", "application/json", []byte(`{"username": "jack", "password": "wrong"}`))
+	response = apiClient.postJSONString(t, "/api/user/login", `{"username": "jack", "password": "wrong"}`)
 	require.EqualValues(t, http.StatusBadRequest, response.StatusCode)
 }
 
@@ -841,11 +851,11 @@ func TestCSRFProtection(t *testing.T) {
 	defer cleanup()
 
 	browser := newBrowser(t, hi.httpAddr)
-	response := browser.post(t, "/csrf_protection_disabled", "application/json", []byte(`{}`))
+	response := browser.postJSONString(t, "/csrf_protection_disabled", `{}`)
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 
 	browser = newBrowser(t, hi.httpAddr)
-	response = browser.post(t, "/csrf_protection_enabled", "application/json", []byte(`{}`))
+	response = browser.postJSONString(t, "/csrf_protection_enabled", `{}`)
 	require.EqualValues(t, http.StatusForbidden, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
 	assert.Contains(t, responseBody, "Custom CRSF failure message.")
