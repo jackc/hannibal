@@ -1,10 +1,14 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"net/http/httputil"
+)
 
 type reverseProxy struct {
+	rp *httputil.ReverseProxy
 }
 
-func (*reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello, world"))
+func (rp *reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	rp.rp.ServeHTTP(w, r)
 }

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -119,7 +121,7 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 			if r.CheckPasswordDigest != nil {
 				inArgs, _, err := getSQLFuncArgs(ctx, dbconn, schema, r.CheckPasswordDigest.GetPasswordDigestFunc)
 				if err != nil {
-					return nil, fmt.Errorf("route %s:, %v", routeName(r), err)
+					return nil, fmt.Errorf("route %s: %v", routeName(r), err)
 				}
 
 				pgFuncHandler.CheckPasswordDigest, err = newCheckPasswordDigest(r.CheckPasswordDigest.GetPasswordDigestFunc, inArgs)
@@ -136,7 +138,13 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 				handler = pgFuncHandler
 			}
 		} else if r.ReverseProxy != "" {
-			handler = &reverseProxy{}
+			dstURL, err := url.Parse(r.ReverseProxy)
+			if err != nil {
+				return nil, fmt.Errorf("route %s: %v", routeName(r), err)
+			}
+			handler = &reverseProxy{
+				rp: httputil.NewSingleHostReverseProxy(dstURL),
+			}
 		} else {
 			panic("no handler config") // This should be unreachable due to routeHasOneHandler check above.
 		}

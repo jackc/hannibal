@@ -873,3 +873,28 @@ func TestCSRFProtection(t *testing.T) {
 	response = browser.post(t, "/csrf_protection_enabled", "application/x-www-form-urlencoded", []byte(form.Encode()))
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 }
+
+func TestReverseProxy(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	cmd := exec.Command(filepath.Join("tmp", "test", "bin", "http_server"))
+	err := cmd.Start()
+	require.NoError(t, err)
+	defer func() {
+		err := cmd.Process.Kill()
+		require.NoError(t, err)
+		err = cmd.Wait()
+		require.EqualError(t, err, "signal: killed")
+	}()
+
+	waitForListeningTCPServer(t, "127.0.0.1:3456")
+
+	browser := newBrowser(t, hi.httpAddr)
+	response := browser.get(t, "/reverse_proxy/hello")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Hello via reverse proxy!")
+}

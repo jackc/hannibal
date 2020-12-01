@@ -22,7 +22,7 @@ file "embed/statik/statik.go" => FileList["embed/root/**/*"] do
   sh "statik -src embed/root -dest embed"
 end
 
-file "tmp/development/bin/hannibal" => ["embed/statik/statik.go", *FileList["**/*.go"]].reject { |f| f =~ /_test.go$/} do |t|
+file "tmp/development/bin/hannibal" => ["embed/statik/statik.go", *FileList["**/*.go"]].reject { |f| f =~ /_test.go$/ || f =~ /testdata/} do |t|
   sh "go build -o tmp/development/bin/hannibal"
 end
 
@@ -43,8 +43,12 @@ file "tmp/test/bin/hannibal" => ["tmp/test/bin", "tmp/development/bin/hannibal"]
   FileUtils.copy_file "tmp/development/bin/hannibal", "tmp/test/bin/hannibal"
 end
 
+file "tmp/test/bin/http_server" => ["tmp/test/bin", *FileList["testdata/http_server/**/*.go"]] do
+  sh "go build -o tmp/test/bin/http_server github.com/jackc/hannibal/testdata/http_server"
+end
+
 desc "Run tests"
-task test: ["tmp/test/bin/hannibal"]  do
+task test: ["tmp/test/bin/hannibal", "tmp/test/bin/http_server"]  do
   sh "go test ./..."
 end
 
