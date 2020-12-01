@@ -22,6 +22,7 @@ import (
 
 var allowedInArgs = []string{
 	"args",
+	"raw_args",
 	"cookie_session",
 }
 
@@ -199,6 +200,8 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch ia {
 		case "args":
 			sqlArgs = append(sqlArgs, queryArgs)
+		case "raw_args":
+			sqlArgs = append(sqlArgs, rawArgs)
 		case "cookie_session":
 			sqlArgs = append(sqlArgs, requestCookieSession)
 		}

@@ -74,6 +74,8 @@ routes:
               type: text
             - name: bar
               type: int
+  - post: /raw_args
+    func: http_post_raw_args
   - get: /response_headers
     func: http_response_headers
   - get: /get_csrf_token

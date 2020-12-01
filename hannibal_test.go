@@ -788,6 +788,23 @@ func TestJSONArrayAndObjectArgs(t *testing.T) {
 	assert.Equal(t, expectedResult, responseData)
 }
 
+func TestRawArgs(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	browser := newBrowser(t, hi.httpAddr)
+	browser.getCSRFToken(t)
+	response := browser.postJSONString(t, "/raw_args", `{"name": "Jack"}`)
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
+	var responseData map[string]interface{}
+	err := json.Unmarshal(readResponseBody(t, response), &responseData)
+	require.NoError(t, err)
+	assert.Equal(t, "Jack", responseData["name"])
+}
+
 func TestArgErrors(t *testing.T) {
 	t.Parallel()
 
