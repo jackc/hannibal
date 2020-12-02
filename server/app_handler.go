@@ -131,12 +131,7 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 
 			pgFuncHandler.RootTemplate = tmpl
 			pgFuncHandler.Host = host
-
-			if csrfFunc != nil && !r.DisableCSRFProtection {
-				handler = csrfFunc(pgFuncHandler)
-			} else {
-				handler = pgFuncHandler
-			}
+			handler = pgFuncHandler
 		} else if r.ReverseProxy != "" {
 			dstURL, err := url.Parse(r.ReverseProxy)
 			if err != nil {
@@ -181,6 +176,10 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 			handler = rp
 		} else {
 			panic("no handler config") // This should be unreachable due to routeHasOneHandler check above.
+		}
+
+		if csrfFunc != nil && !r.DisableCSRFProtection {
+			handler = csrfFunc(handler)
 		}
 
 		if r.GetPath != "" {

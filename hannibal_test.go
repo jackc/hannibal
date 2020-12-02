@@ -974,3 +974,28 @@ func TestReverseProxyCookieSession(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]interface{}{"foo": "bar"}, responseData)
 }
+
+func TestReverseProxyCSRFProtection(t *testing.T) {
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	port := "3456"
+	cmd := exec.Command(filepath.Join("tmp", "test", "bin", "http_server"), port)
+	err := cmd.Start()
+	require.NoError(t, err)
+	defer func() {
+		err := cmd.Process.Kill()
+		require.NoError(t, err)
+		err = cmd.Wait()
+		require.EqualError(t, err, "signal: killed")
+	}()
+
+	waitForListeningTCPServer(t, fmt.Sprintf("127.0.0.1:%s", port))
+
+	browser := newBrowser(t, hi.httpAddr)
+
+	response := browser.postJSONString(t, "/reverse_proxy/cookie_session", `{"foo": "bar"}`)
+	require.EqualValues(t, http.StatusForbidden, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Custom CRSF failure message.")
+}
