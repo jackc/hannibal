@@ -87,3 +87,7 @@ routes:
     disable-csrf-protection: true
   - path: /reverse_proxy*
     reverse-proxy: http://127.0.0.1:3456
+  - get: /cookie_session
+    func: http_get_cookie_session
+  - post: /cookie_session
+    func: http_set_cookie_session

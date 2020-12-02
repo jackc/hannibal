@@ -142,9 +142,43 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 			if err != nil {
 				return nil, fmt.Errorf("route %s: %v", routeName(r), err)
 			}
-			handler = &reverseProxy{
+			rp := &reverseProxy{
 				rp: httputil.NewSingleHostReverseProxy(dstURL),
 			}
+			originalDirector := rp.rp.Director
+			rp.rp.Director = func(r *http.Request) {
+				if cookie, err := r.Cookie("hannibal-session"); err == nil {
+					var requestCookieSession []byte
+					host.secureCookie.Decode("hannibal-session", cookie.Value, &requestCookieSession)
+					r.Header.Add("X-Hannibal-Cookie-Session", string(requestCookieSession))
+				}
+				originalDirector(r)
+			}
+
+			rp.rp.ModifyResponse = func(resp *http.Response) error {
+				responseCookieSession := resp.Header.Get("X-Hannibal-Cookie-Session")
+				if responseCookieSession != "" {
+					resp.Header.Del("X-Hannibal-Cookie-Session")
+					cookie := &http.Cookie{
+						Name:     "hannibal-session",
+						Path:     "/",
+						Secure:   false, // TODO - false in dev mode -- configurable in production
+						HttpOnly: true,
+					}
+
+					encoded, err := host.secureCookie.Encode("hannibal-session", []byte(responseCookieSession))
+					if err != nil {
+						panic(err)
+					}
+					cookie.Value = encoded
+
+					resp.Header.Add("Set-Cookie", cookie.String())
+				}
+
+				return nil
+			}
+
+			handler = rp
 		} else {
 			panic("no handler config") // This should be unreachable due to routeHasOneHandler check above.
 		}

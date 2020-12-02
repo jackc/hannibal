@@ -920,3 +920,57 @@ func TestReverseProxy(t *testing.T) {
 	responseBody := string(readResponseBody(t, response))
 	assert.Contains(t, responseBody, "Hello via reverse proxy!")
 }
+
+func TestReverseProxyCookieSession(t *testing.T) {
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	port := "3456"
+	cmd := exec.Command(filepath.Join("tmp", "test", "bin", "http_server"), port)
+	err := cmd.Start()
+	require.NoError(t, err)
+	defer func() {
+		err := cmd.Process.Kill()
+		require.NoError(t, err)
+		err = cmd.Wait()
+		require.EqualError(t, err, "signal: killed")
+	}()
+
+	waitForListeningTCPServer(t, fmt.Sprintf("127.0.0.1:%s", port))
+
+	browser := newBrowser(t, hi.httpAddr)
+	browser.getCSRFToken(t)
+
+	// Set the cookie session in a PGFuncHandler
+	response := browser.postJSONString(t, "/cookie_session", `{"name": "Jack"}`)
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+
+	// Read the cookie session from a PGFuncHandler to ensure that the set occurred correctly.
+	response = browser.get(t, "/cookie_session")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	var responseData map[string]interface{}
+	err = json.Unmarshal(readResponseBody(t, response), &responseData)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"*": "cookie_session", "name": "Jack"}, responseData) // "*" key is from Chi router
+
+	// Read the cookie session as seen by the reverse proxy.
+	response = browser.get(t, "/reverse_proxy/cookie_session")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseData = nil
+	err = json.Unmarshal(readResponseBody(t, response), &responseData)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"*": "cookie_session", "name": "Jack"}, responseData) // "*" key is from Chi router
+
+	// Set the cookie session from the reverse proxy.
+	response = browser.postJSONString(t, "/reverse_proxy/cookie_session", `{"foo": "bar"}`)
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "", response.Header.Get("X-Hannibal-Cookie-Session")) // Ensure plaintext cookie is not leaked
+
+	// Read the updated cookie session from a PGFuncHandler.
+	response = browser.get(t, "/cookie_session")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseData = nil
+	err = json.Unmarshal(readResponseBody(t, response), &responseData)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"foo": "bar"}, responseData)
+}
