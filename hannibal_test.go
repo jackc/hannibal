@@ -43,6 +43,11 @@ func TestMain(m *testing.M) {
 		}
 	}
 
+	err := externalHTTPServer.ensureStopped()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to ensure external HTTP server stopped: %v", err)
+	}
+
 	os.Exit(exitCode)
 }
 
@@ -141,6 +146,48 @@ func (dbm *dbManagerT) dropDB(t *testing.T, dbName string) {
 
 	_, err := dbm.conn.Exec(ctx, fmt.Sprintf("drop database %s with (force)", dbName))
 	require.NoError(t, err)
+}
+
+type externalHTTPServerT struct {
+	mutex sync.Mutex
+	cmd   *exec.Cmd
+}
+
+var externalHTTPServer externalHTTPServerT
+
+func (ehs *externalHTTPServerT) ensureStarted(t *testing.T) {
+	ehs.mutex.Lock()
+	defer ehs.mutex.Unlock()
+
+	port := "3456"
+	ehs.cmd = exec.Command(filepath.Join("tmp", "test", "bin", "http_server"), port)
+	err := ehs.cmd.Start()
+	require.NoError(t, err)
+
+	waitForListeningTCPServer(t, fmt.Sprintf("127.0.0.1:%s", port))
+}
+
+func (ehs *externalHTTPServerT) ensureStopped() error {
+	ehs.mutex.Lock()
+	defer ehs.mutex.Unlock()
+
+	if ehs.cmd == nil {
+		return nil
+	}
+
+	cmd := ehs.cmd
+	ehs.cmd = nil
+
+	err := cmd.Process.Kill()
+	if err != nil {
+		return err
+	}
+	err = cmd.Wait()
+	if err != nil && err.Error() != "signal: killed" {
+		return err
+	}
+
+	return nil
 }
 
 func execHannibal(t *testing.T, args ...string) string {
@@ -898,21 +945,11 @@ func TestCSRFProtection(t *testing.T) {
 }
 
 func TestReverseProxy(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
-
-	port := "3456"
-	cmd := exec.Command(filepath.Join("tmp", "test", "bin", "http_server"), port)
-	err := cmd.Start()
-	require.NoError(t, err)
-	defer func() {
-		err := cmd.Process.Kill()
-		require.NoError(t, err)
-		err = cmd.Wait()
-		require.EqualError(t, err, "signal: killed")
-	}()
-
-	waitForListeningTCPServer(t, fmt.Sprintf("127.0.0.1:%s", port))
+	externalHTTPServer.ensureStarted(t)
 
 	browser := newBrowser(t, hi.httpAddr)
 	response := browser.get(t, "/reverse_proxy/hello")
@@ -922,21 +959,11 @@ func TestReverseProxy(t *testing.T) {
 }
 
 func TestReverseProxyCookieSession(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
-
-	port := "3456"
-	cmd := exec.Command(filepath.Join("tmp", "test", "bin", "http_server"), port)
-	err := cmd.Start()
-	require.NoError(t, err)
-	defer func() {
-		err := cmd.Process.Kill()
-		require.NoError(t, err)
-		err = cmd.Wait()
-		require.EqualError(t, err, "signal: killed")
-	}()
-
-	waitForListeningTCPServer(t, fmt.Sprintf("127.0.0.1:%s", port))
+	externalHTTPServer.ensureStarted(t)
 
 	browser := newBrowser(t, hi.httpAddr)
 	browser.getCSRFToken(t)
@@ -949,7 +976,7 @@ func TestReverseProxyCookieSession(t *testing.T) {
 	response = browser.get(t, "/cookie_session")
 	require.EqualValues(t, http.StatusOK, response.StatusCode)
 	var responseData map[string]interface{}
-	err = json.Unmarshal(readResponseBody(t, response), &responseData)
+	err := json.Unmarshal(readResponseBody(t, response), &responseData)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]interface{}{"*": "cookie_session", "name": "Jack"}, responseData) // "*" key is from Chi router
 
@@ -976,24 +1003,13 @@ func TestReverseProxyCookieSession(t *testing.T) {
 }
 
 func TestReverseProxyCSRFProtection(t *testing.T) {
+	t.Parallel()
+
 	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
 	defer cleanup()
-
-	port := "3456"
-	cmd := exec.Command(filepath.Join("tmp", "test", "bin", "http_server"), port)
-	err := cmd.Start()
-	require.NoError(t, err)
-	defer func() {
-		err := cmd.Process.Kill()
-		require.NoError(t, err)
-		err = cmd.Wait()
-		require.EqualError(t, err, "signal: killed")
-	}()
-
-	waitForListeningTCPServer(t, fmt.Sprintf("127.0.0.1:%s", port))
+	externalHTTPServer.ensureStarted(t)
 
 	browser := newBrowser(t, hi.httpAddr)
-
 	response := browser.postJSONString(t, "/reverse_proxy/cookie_session", `{"foo": "bar"}`)
 	require.EqualValues(t, http.StatusForbidden, response.StatusCode)
 	responseBody := string(readResponseBody(t, response))
