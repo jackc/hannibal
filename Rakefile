@@ -3,7 +3,7 @@ require "fileutils"
 require "rake/testtask"
 require "erb"
 
-CLOBBER.include("tmp")
+CLOBBER.include("tmp", "srvman/tmp")
 
 def passthrough_args
   i = ARGV.index("--")
@@ -15,6 +15,7 @@ def passthrough_args
   args
 end
 
+directory "srvman/tmp/test/bin"
 directory "tmp/development/bin"
 directory "tmp/test/bin"
 
@@ -47,8 +48,12 @@ file "tmp/test/bin/http_server" => ["tmp/test/bin", *FileList["testdata/http_ser
   sh "go build -o tmp/test/bin/http_server github.com/jackc/hannibal/testdata/http_server"
 end
 
+file "srvman/tmp/test/bin/http_server" => ["srvman/tmp/test/bin", *FileList["srvman/testdata/http_server/**/*.go"]] do
+  sh "go build -o srvman/tmp/test/bin/http_server github.com/jackc/hannibal/srvman/testdata/http_server"
+end
+
 desc "Run tests"
-task test: ["tmp/test/bin/hannibal", "tmp/test/bin/http_server"]  do
+task test: ["tmp/test/bin/hannibal", "srvman/tmp/test/bin/http_server", "tmp/test/bin/http_server"] do
   sh "go test ./..."
 end
 
