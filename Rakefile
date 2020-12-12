@@ -52,8 +52,11 @@ file "srvman/tmp/test/bin/http_server" => ["srvman/tmp/test/bin", *FileList["srv
   sh "go build -o srvman/tmp/test/bin/http_server github.com/jackc/hannibal/srvman/testdata/http_server"
 end
 
+desc "Build test dependencies"
+task testdep: ["tmp/test/bin/hannibal", "srvman/tmp/test/bin/http_server", "tmp/test/bin/http_server"]
+
 desc "Run tests"
-task test: ["tmp/test/bin/hannibal", "srvman/tmp/test/bin/http_server", "tmp/test/bin/http_server"] do
+task test: :testdep do
   sh "go test ./..."
 end
 
