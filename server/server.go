@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/hannibal/db"
 )
 
-var shutdownSignals = []os.Signal{os.Interrupt}
-
 type Config struct {
 	ListenAddress string
 	AppPath       string
@@ -33,6 +31,7 @@ func Serve(config *Config) {
 	}
 
 	interruptChan := make(chan os.Signal, 1)
+	shutdownSignals := []os.Signal{os.Interrupt}
 	signal.Notify(interruptChan, shutdownSignals...)
 	go func() {
 		s := <-interruptChan

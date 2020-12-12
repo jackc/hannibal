@@ -2,7 +2,10 @@ package develop
 
 import (
 	"context"
+	"os"
+	"os/signal"
 	"path/filepath"
+	"time"
 
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
@@ -55,6 +58,23 @@ func Develop(config *Config) {
 	}
 
 	log.Info().Str("addr", host.HTTPListenAddr).Msg("Starting HTTP server")
+
+	interruptChan := make(chan os.Signal, 1)
+	shutdownSignals := []os.Signal{os.Interrupt}
+	signal.Notify(interruptChan, shutdownSignals...)
+	go func() {
+		s := <-interruptChan
+		signal.Reset() // Only listen for one interrupt. If another interrupt signal is received allow it to terminate the program.
+		log.Info().Str("signal", s.String()).Msg("shutdown signal received")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		err := host.Shutdown(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("graceful shutdown failed")
+		}
+		os.Exit(0)
+	}()
 
 	go func() {
 		err = host.ListenAndServe()

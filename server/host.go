@@ -20,8 +20,10 @@ import (
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/deploy"
+	"github.com/jackc/hannibal/srvman"
 	"github.com/jackc/hannibal/system"
 	"github.com/jackc/pgx/v4"
+	"golang.org/x/sync/errgroup"
 )
 
 type Host struct {
@@ -34,6 +36,9 @@ type Host struct {
 	appHandler   http.Handler
 
 	secureCookie *securecookie.SecureCookie
+
+	deployColor  srvman.Color
+	serviceGroup *srvman.Group
 }
 
 func (h *Host) ListenAndServe() error {
@@ -77,12 +82,17 @@ func (h *Host) ListenAndServe() error {
 }
 
 func (h *Host) Shutdown(ctx context.Context) error {
-	h.httpServer.SetKeepAlivesEnabled(false)
-	err := h.httpServer.Shutdown(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		h.httpServer.SetKeepAlivesEnabled(false)
+		return h.httpServer.Shutdown(ctx)
+	})
+
+	eg.Go(func() error {
+		return h.serviceGroup.Stop(ctx)
+	})
+
+	return eg.Wait()
 }
 
 func (h *Host) Load(ctx context.Context, projectPath string) error {
@@ -118,8 +128,53 @@ func (h *Host) Load(ctx context.Context, projectPath string) error {
 		return err
 	}
 
+	nextColor := h.deployColor.Next()
+	nextServiceGroup, err := newServiceGroup(appConfig.Services)
+	if err != nil {
+		return err
+	}
+
+	err = nextServiceGroup.Start(ctx, nextColor)
+	if err != nil {
+		return err
+	}
+	oldServiceGroup := h.serviceGroup
+
 	h.appHandler = newAppHandler
+	h.deployColor = nextColor
+	h.serviceGroup = nextServiceGroup
+
+	if oldServiceGroup != nil {
+		go func() {
+			oldServiceGroup.Stop(context.Background())
+		}()
+	}
+
 	return nil
+}
+
+func newServiceGroup(serviceConfs []*appconf.Service) (*srvman.Group, error) {
+	group := &srvman.Group{}
+	for _, sc := range serviceConfs {
+		sc2 := &srvman.ServiceConfig{
+			Name:        sc.Name,
+			Cmd:         sc.Cmd,
+			Args:        sc.Args,
+			HTTPAddress: sc.HTTPAddress,
+			Blue:        sc.Blue,
+			Green:       sc.Green,
+		}
+
+		if sc.HealthCheck != nil {
+			sc2.HealthCheck = &srvman.HealthCheck{
+				TCPConnect: sc.HealthCheck.TCPConnect,
+			}
+		}
+
+		group.ServiceConfigs = append(group.ServiceConfigs, sc2)
+	}
+
+	return group, nil
 }
 
 func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
@@ -232,10 +287,30 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	nextColor := h.deployColor.Next()
+	nextServiceGroup, err := newServiceGroup(appConfig.Services)
+	if err != nil {
+		return
+	}
+
+	err = nextServiceGroup.Start(ctx, nextColor)
+	if err != nil {
+		return
+	}
+	oldServiceGroup := h.serviceGroup
+
 	h.installMutex.Lock()
 	defer h.installMutex.Unlock()
 
 	h.appHandler = newAppHandler
+	h.deployColor = nextColor
+	h.serviceGroup = nextServiceGroup
+
+	if oldServiceGroup != nil {
+		go func() {
+			oldServiceGroup.Stop(context.Background())
+		}()
+	}
 
 	_, err = db.Sys(ctx).Exec(ctx, fmt.Sprintf("drop schema if exists %s cascade", db.QuoteSchema(dbconfig.AppSchema)))
 	if err != nil {

@@ -253,7 +253,7 @@ type Group struct {
 // Start starts all services from g.ServiceConfigs. If any fail to start it will terminate any that did successfully
 // start and return an error. Start must only be called once for any group. Group must not be modified after Start is
 // called.
-func (g *Group) Start(color Color) error {
+func (g *Group) Start(ctx context.Context, color Color) error {
 	g.color = color
 
 	// Create but do not start services.
@@ -285,7 +285,7 @@ func (g *Group) Start(color Color) error {
 	return nil
 }
 
-func (g *Group) Stop() error {
+func (g *Group) Stop(ctx context.Context) error {
 	errChan := make(chan error)
 	for _, s := range g.services {
 		go func(s *service) {

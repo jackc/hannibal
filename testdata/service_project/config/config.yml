@@ -1,0 +1,18 @@
+csrf-protection:
+  disable: true
+services:
+  - name: backend
+    cmd: tmp/test/bin/http_server
+    args:
+      - "[[bluegreen.port]]"
+    http-address: http://127.0.0.1:[[bluegreen.port]]/
+    health-check:
+      tcp-connect: 127.0.0.1:[[bluegreen.port]]
+    blue:
+      port: 4100
+    green:
+      port: 4101
+routes:
+  - path: /reverse_proxy*
+    reverse-proxy: http://127.0.0.1:4100
+    # reverse-proxy: backend

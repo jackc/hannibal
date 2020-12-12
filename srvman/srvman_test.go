@@ -1,6 +1,7 @@
 package srvman_test
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 	"testing"
@@ -22,6 +23,7 @@ func (w *TestLogWriter) Write(p []byte) (int, error) {
 }
 
 func TestGroupSimpleLifeCycle(t *testing.T) {
+	ctx := context.Background()
 
 	makeGroup := func() *srvman.Group {
 		tlr := &TestLogWriter{T: t}
@@ -49,12 +51,12 @@ func TestGroupSimpleLifeCycle(t *testing.T) {
 
 	blueGroup := makeGroup()
 
-	err := blueGroup.Start(srvman.ColorBlue)
+	err := blueGroup.Start(ctx, srvman.ColorBlue)
 	require.NoError(t, err)
 	blueStopped := false
 	defer func() {
 		if !blueStopped {
-			blueGroup.Stop()
+			blueGroup.Stop(ctx)
 		}
 	}()
 
@@ -68,16 +70,16 @@ func TestGroupSimpleLifeCycle(t *testing.T) {
 
 	greenGroup := makeGroup()
 
-	err = greenGroup.Start(srvman.ColorGreen)
+	err = greenGroup.Start(ctx, srvman.ColorGreen)
 	require.NoError(t, err)
 	greenStopped := false
 	defer func() {
 		if !greenStopped {
-			greenGroup.Stop()
+			greenGroup.Stop(ctx)
 		}
 	}()
 
-	err = blueGroup.Stop()
+	err = blueGroup.Stop(ctx)
 	blueStopped = true
 	require.NoError(t, err)
 
@@ -89,7 +91,7 @@ func TestGroupSimpleLifeCycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Hello, world!", string(body))
 
-	err = greenGroup.Stop()
+	err = greenGroup.Stop(ctx)
 	greenStopped = true
 	require.NoError(t, err)
 }

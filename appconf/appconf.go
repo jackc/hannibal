@@ -13,6 +13,7 @@ import (
 type Config struct {
 	CSRFProtection *CSRFProtection `yaml:"csrf-protection"`
 	Routes         []Route
+	Services       []*Service
 }
 
 type CSRFProtection struct {
@@ -66,11 +67,26 @@ type CheckPasswordDigest struct {
 	GetPasswordDigestFunc string `yaml:"get-password-digest-func"`
 }
 
+type Service struct {
+	Name        string
+	Cmd         string
+	Args        []string     `yaml:",flow"`
+	HTTPAddress string       `yaml:"http-address"`
+	HealthCheck *HealthCheck `yaml:"health-check"`
+	Blue        map[string]interface{}
+	Green       map[string]interface{}
+}
+
+type HealthCheck struct {
+	TCPConnect string `yaml:"tcp-connect"`
+}
+
 func (c *Config) Merge(other *Config) {
 	if other.CSRFProtection != nil {
 		c.CSRFProtection = other.CSRFProtection
 	}
 	c.Routes = append(c.Routes, other.Routes...)
+	c.Services = append(c.Services, other.Services...)
 }
 
 func New(yml []byte) (*Config, error) {

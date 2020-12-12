@@ -341,7 +341,7 @@ type hannibalProcess struct {
 }
 
 func (hp *hannibalProcess) stop(t *testing.T) {
-	err := hp.process.Kill()
+	err := hp.process.Signal(os.Interrupt)
 	require.NoError(t, err)
 
 	waitDone := make(chan bool)
@@ -361,7 +361,9 @@ func (hp *hannibalProcess) stop(t *testing.T) {
 	case err := <-waitErr:
 		t.Fatal(err)
 	case <-time.After(5 * time.Second):
-		t.Fatal("Timeout waiting for hannibal to terminate")
+		t.Log("Timeout waiting for hannibal to gracefully shutdown. Killing process.")
+		err := hp.process.Kill()
+		require.NoError(t, err)
 	}
 
 	err = hp.writeStdout.Close()
@@ -539,7 +541,7 @@ func runHannibalServe(t *testing.T, projectPath string) (*hannibalInstance, func
 		dbName:      testDB,
 		databaseDSN: fmt.Sprintf("database=%s", testDB),
 		appPath:     appDir,
-		projectPath: filepath.Join("testdata", "testproject"),
+		projectPath: projectPath,
 	}
 
 	hi.serve(t)
@@ -707,6 +709,32 @@ func TestServePublicFiles(t *testing.T) {
 	fileBody, err := ioutil.ReadFile(filepath.Join("testdata", "testproject", "public", "hello.html"))
 	require.NoError(t, err)
 	require.Equal(t, fileBody, responseBody)
+}
+
+func TestDevelopService(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalDevelop(t, filepath.Join("testdata", "service_project"))
+	defer cleanup()
+
+	browser := newBrowser(t, hi.httpAddr)
+	response := browser.get(t, "/reverse_proxy/hello")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Hello via reverse proxy!")
+}
+
+func TestServeService(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "service_project"))
+	defer cleanup()
+
+	browser := newBrowser(t, hi.httpAddr)
+	response := browser.get(t, "/reverse_proxy/hello")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+	responseBody := string(readResponseBody(t, response))
+	assert.Contains(t, responseBody, "Hello via reverse proxy!")
 }
 
 func TestRouteArgs(t *testing.T) {
