@@ -14,5 +14,4 @@ services:
       port: 4101
 routes:
   - path: /reverse_proxy*
-    reverse-proxy: http://127.0.0.1:4100
-    # reverse-proxy: backend
+    reverse-proxy: backend

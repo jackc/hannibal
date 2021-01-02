@@ -123,11 +123,6 @@ func (h *Host) Load(ctx context.Context, projectPath string) error {
 		return err
 	}
 
-	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig, rootTmpl, h, filepath.Join(projectPath, "public"))
-	if err != nil {
-		return err
-	}
-
 	nextColor := h.deployColor.Next()
 	nextServiceGroup, err := newServiceGroup(appConfig.Services)
 	if err != nil {
@@ -138,6 +133,12 @@ func (h *Host) Load(ctx context.Context, projectPath string) error {
 	if err != nil {
 		return err
 	}
+
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), dbconfig.AppSchema, appConfig, nextServiceGroup, rootTmpl, h, filepath.Join(projectPath, "public"))
+	if err != nil {
+		return err
+	}
+
 	oldServiceGroup := h.serviceGroup
 
 	h.appHandler = newAppHandler
@@ -280,13 +281,6 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig, rootTmpl, h, filepath.Join(currentPath, "public"))
-	if err != nil {
-		current.Logger(ctx).Error().Caller().Err(err).Send()
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
 	nextColor := h.deployColor.Next()
 	nextServiceGroup, err := newServiceGroup(appConfig.Services)
 	if err != nil {
@@ -297,6 +291,14 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		return
 	}
+
+	newAppHandler, err := NewAppHandler(ctx, db.App(ctx), nextSchema, appConfig, nextServiceGroup, rootTmpl, h, filepath.Join(currentPath, "public"))
+	if err != nil {
+		current.Logger(ctx).Error().Caller().Err(err).Send()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	oldServiceGroup := h.serviceGroup
 
 	h.installMutex.Lock()

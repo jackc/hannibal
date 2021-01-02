@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/hannibal/appconf"
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
+	"github.com/jackc/hannibal/srvman"
 )
 
 func routeHasOnePath(r appconf.Route) bool {
@@ -73,7 +74,7 @@ func routeName(r appconf.Route) string {
 	return r.Path
 }
 
-func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConfig *appconf.Config, tmpl *template.Template, host *Host, publicPath string) (http.Handler, error) {
+func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConfig *appconf.Config, serviceGroup *srvman.Group, tmpl *template.Template, host *Host, publicPath string) (http.Handler, error) {
 	csrfFunc, err := makeCSRFFunc(ctx, dbconn, schema, appConfig.CSRFProtection, tmpl, host)
 	if err != nil {
 		return nil, err
@@ -133,7 +134,14 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 			pgFuncHandler.Host = host
 			handler = pgFuncHandler
 		} else if r.ReverseProxy != "" {
-			dstURL, err := url.Parse(r.ReverseProxy)
+			var httpAddress string
+			if service := serviceGroup.GetService(r.ReverseProxy); service != nil {
+				httpAddress = service.HTTPAddress
+			} else {
+				httpAddress = r.ReverseProxy
+			}
+
+			dstURL, err := url.Parse(httpAddress)
 			if err != nil {
 				return nil, fmt.Errorf("route %s: %v", routeName(r), err)
 			}

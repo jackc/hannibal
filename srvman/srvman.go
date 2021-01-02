@@ -307,7 +307,7 @@ func (g *Group) Stop(ctx context.Context) error {
 	return nil
 }
 
-// GetService gets the service by name. It will panic if no service by name exists.
+// GetService gets the service by name. It will return nil if no service by that name exists.
 func (g *Group) GetService(name string) *Service {
 	for _, s := range g.services {
 		if s.name == name {
@@ -315,7 +315,7 @@ func (g *Group) GetService(name string) *Service {
 		}
 	}
 
-	panic(fmt.Errorf("service not found: %s", name))
+	return nil
 }
 
 // newService makes a new service from sc and color, but does not start it.
