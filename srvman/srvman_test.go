@@ -60,7 +60,7 @@ func TestGroupSimpleLifeCycle(t *testing.T) {
 		}
 	}()
 
-	resp, err := http.Get("http://127.0.0.1:4200/")
+	resp, err := http.Get(blueGroup.GetService("http_hello").HTTPAddress)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -83,7 +83,7 @@ func TestGroupSimpleLifeCycle(t *testing.T) {
 	blueStopped = true
 	require.NoError(t, err)
 
-	resp, err = http.Get("http://127.0.0.1:4201/")
+	resp, err = http.Get(greenGroup.GetService("http_hello").HTTPAddress)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 

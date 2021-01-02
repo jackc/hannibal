@@ -122,13 +122,13 @@ func (hc *HealthCheck) checkTCPConnect(ctx context.Context) error {
 	}
 }
 
-// service is a service managed by a group that should be running.
-type service struct {
+// Service is a manager for a process. It is managed by a Group and should not be directly used.
+type Service struct {
 	config *ServiceConfig
 
 	name        string
 	cmd         *exec.Cmd
-	httpAddress string
+	HTTPAddress string
 	healthCheck *HealthCheck
 
 	started bool
@@ -143,7 +143,7 @@ type service struct {
 }
 
 // start starts the service. It must only be called once.
-func (s *service) start() error {
+func (s *Service) start() error {
 	if s.started {
 		return fmt.Errorf("start has already been called")
 	}
@@ -192,13 +192,13 @@ func (s *service) start() error {
 }
 
 // stop stops the service and waits until the process has ended.
-func (s *service) stop() error {
+func (s *Service) stop() error {
 	close(s.stoppedChan)
 	<-s.cleanupChan
 	return nil
 }
 
-func (s *service) waitForStartup() {
+func (s *Service) waitForStartup() {
 	if s.healthCheck == nil {
 		s.startupChan <- nil
 		return
@@ -215,7 +215,7 @@ func (s *service) waitForStartup() {
 	s.startupChan <- s.healthCheck.Check(ctx)
 }
 
-func (s *service) monitor() {
+func (s *Service) monitor() {
 	for {
 		select {
 		// Process has unexpectedly died.
@@ -247,7 +247,7 @@ type Group struct {
 	ServiceConfigs []*ServiceConfig
 
 	color    Color
-	services []*service
+	services []*Service
 }
 
 // Start starts all services from g.ServiceConfigs. If any fail to start it will terminate any that did successfully
@@ -257,7 +257,7 @@ func (g *Group) Start(ctx context.Context, color Color) error {
 	g.color = color
 
 	// Create but do not start services.
-	g.services = make([]*service, 0, len(g.ServiceConfigs))
+	g.services = make([]*Service, 0, len(g.ServiceConfigs))
 	for _, sc := range g.ServiceConfigs {
 		s, err := newService(sc, color)
 		if err != nil {
@@ -288,7 +288,7 @@ func (g *Group) Start(ctx context.Context, color Color) error {
 func (g *Group) Stop(ctx context.Context) error {
 	errChan := make(chan error)
 	for _, s := range g.services {
-		go func(s *service) {
+		go func(s *Service) {
 			err := s.stop()
 			errChan <- err
 		}(s)
@@ -307,9 +307,20 @@ func (g *Group) Stop(ctx context.Context) error {
 	return nil
 }
 
+// GetService gets the service by name. It will panic if no service by name exists.
+func (g *Group) GetService(name string) *Service {
+	for _, s := range g.services {
+		if s.name == name {
+			return s
+		}
+	}
+
+	panic(fmt.Errorf("service not found: %s", name))
+}
+
 // newService makes a new service from sc and color, but does not start it.
-func newService(sc *ServiceConfig, color Color) (*service, error) {
-	s := &service{
+func newService(sc *ServiceConfig, color Color) (*Service, error) {
+	s := &Service{
 		config: sc,
 		name:   sc.Name,
 	}
@@ -341,7 +352,7 @@ func newService(sc *ServiceConfig, color Color) (*service, error) {
 	s.cmd.Stdout = os.Stdout
 	s.cmd.Stderr = os.Stderr
 
-	s.httpAddress, err = interpolateColorVariables(sc.HTTPAddress, colorConf)
+	s.HTTPAddress, err = interpolateColorVariables(sc.HTTPAddress, colorConf)
 	if err != nil {
 		return nil, err
 	}
