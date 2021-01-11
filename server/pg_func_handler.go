@@ -254,12 +254,11 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, cookie)
 	}
 
-	if status.Status == pgtype.Present {
-		w.WriteHeader(int(status.Int))
-	}
-
 	if respBody != nil {
 		w.Header().Add("Content-Type", "application/json")
+		if status.Status == pgtype.Present {
+			w.WriteHeader(int(status.Int))
+		}
 		w.Write(respBody)
 		return
 	}
@@ -276,6 +275,9 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		templateData["csrfField"] = csrf.TemplateField(r)
 
+		if status.Status == pgtype.Present {
+			w.WriteHeader(int(status.Int))
+		}
 		err := tmpl.Execute(w, templateData)
 		if err != nil {
 			panic(err)
