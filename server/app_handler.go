@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/hannibal/srvman"
+	"github.com/shopspring/decimal"
 )
 
 func routeHasOnePath(r appconf.Route) bool {
@@ -294,6 +295,7 @@ const (
 	RequestParamTypeText = iota + 1
 	RequestParamTypeInt
 	RequestParamTypeBigint
+	RequestParamTypeDecimal
 	RequestParamTypeUUID
 	RequestParamTypeArray
 	RequestParamTypeObject
@@ -324,6 +326,8 @@ func requestParamFromAppConfig(acrp *appconf.RequestParam) (*RequestParam, error
 		rp.Type = RequestParamTypeInt
 	case "bigint", "int8":
 		rp.Type = RequestParamTypeBigint
+	case "numeric", "decimal":
+		rp.Type = RequestParamTypeDecimal
 	case "uuid":
 		rp.Type = RequestParamTypeUUID
 	case "array":
@@ -472,6 +476,26 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 			}
 		default:
 			return nil, fmt.Errorf("%s: cannot convert %v to bigint", rp.Name, value)
+		}
+		return num, nil
+
+	case RequestParamTypeDecimal:
+		if jn, ok := value.(json.Number); ok {
+			value = string(jn)
+		}
+
+		var num decimal.Decimal
+		switch value := value.(type) {
+		case string:
+			var err error
+			num, err = decimal.NewFromString(value)
+			if err != nil {
+				return nil, errors.New("not a number")
+			}
+		case float64:
+			num = decimal.NewFromFloat(value)
+		default:
+			return nil, errors.New("not a number")
 		}
 		return num, nil
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/jackc/hannibal/server"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,6 +108,22 @@ func TestRequestParamParse(t *testing.T) {
 			},
 			value:  "8104307f-4ccb-469d-bfa2-352cd0c57dfa",
 			result: uuid.Must(uuid.FromString("8104307f-4ccb-469d-bfa2-352cd0c57dfa")),
+		},
+		{
+			desc: "decimal from string",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeDecimal,
+			},
+			value:  "123",
+			result: decimal.RequireFromString("123"),
+		},
+		{
+			desc: "decimal from float64",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeDecimal,
+			},
+			value:  float64(123),
+			result: decimal.NewFromFloat(123),
 		},
 		{
 			desc: "array from untyped array",
@@ -218,6 +235,14 @@ func TestRequestParamParse(t *testing.T) {
 			},
 			value:  "999999999999999999999999999999",
 			errStr: "out of range",
+		},
+		{
+			desc: "decimal from non-numeric string",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeDecimal,
+			},
+			value:  "abc",
+			errStr: "not a number",
 		},
 		{
 			desc: "uuid from non-uuid",

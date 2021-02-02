@@ -19,6 +19,7 @@ require (
 	github.com/otiai10/copy v1.2.0
 	github.com/rakyll/statik v0.1.7
 	github.com/rs/zerolog v1.19.0
+	github.com/shopspring/decimal v1.2.0
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.6.1
