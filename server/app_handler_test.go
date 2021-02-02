@@ -3,6 +3,7 @@ package server_test
 import (
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/jackc/hannibal/server"
 	"github.com/stretchr/testify/require"
 )
@@ -98,6 +99,14 @@ func TestRequestParamParse(t *testing.T) {
 			},
 			value:  float64(123),
 			result: int64(123),
+		},
+		{
+			desc: "uuid from string in standard uuid format",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeUUID,
+			},
+			value:  "8104307f-4ccb-469d-bfa2-352cd0c57dfa",
+			result: uuid.Must(uuid.FromString("8104307f-4ccb-469d-bfa2-352cd0c57dfa")),
 		},
 		{
 			desc: "array from untyped array",
@@ -209,6 +218,14 @@ func TestRequestParamParse(t *testing.T) {
 			},
 			value:  "999999999999999999999999999999",
 			errStr: "out of range",
+		},
+		{
+			desc: "uuid from non-uuid",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeUUID,
+			},
+			value:  "abcde",
+			errStr: "not a uuid",
 		},
 	} {
 		t.Run(tt.desc, func(t *testing.T) {

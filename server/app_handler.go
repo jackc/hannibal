@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi"
+	"github.com/gofrs/uuid"
 	"github.com/gorilla/csrf"
 	"github.com/jackc/hannibal/appconf"
 	"github.com/jackc/hannibal/current"
@@ -293,6 +294,7 @@ const (
 	RequestParamTypeText = iota + 1
 	RequestParamTypeInt
 	RequestParamTypeBigint
+	RequestParamTypeUUID
 	RequestParamTypeArray
 	RequestParamTypeObject
 	RequestParamTypeFile
@@ -322,6 +324,8 @@ func requestParamFromAppConfig(acrp *appconf.RequestParam) (*RequestParam, error
 		rp.Type = RequestParamTypeInt
 	case "bigint", "int8":
 		rp.Type = RequestParamTypeBigint
+	case "uuid":
+		rp.Type = RequestParamTypeUUID
 	case "array":
 		rp.Type = RequestParamTypeArray
 	case "object":
@@ -470,6 +474,16 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 			return nil, fmt.Errorf("%s: cannot convert %v to bigint", rp.Name, value)
 		}
 		return num, nil
+
+	case RequestParamTypeUUID:
+		if s, ok := value.(string); ok {
+			u, err := uuid.FromString(s)
+			if err != nil {
+				return nil, errors.New("not a uuid")
+			}
+			return u, nil
+		}
+		return nil, errors.New("not a uuid")
 
 	case RequestParamTypeArray:
 		switch value := value.(type) {
