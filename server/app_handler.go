@@ -503,23 +503,19 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 		return num, nil
 
 	case RequestParamTypeBoolean:
-		var b bool
+		var s string
 		switch value := value.(type) {
 		case bool:
-			b = value
+			return value, nil
 		case string:
-			var err error
-			b, err = strconv.ParseBool(value)
-			if err != nil {
-				return nil, errors.New("not a boolean")
-			}
+			s = value
 		default:
-			s := fmt.Sprint(value)
-			var err error
-			b, err = strconv.ParseBool(s)
-			if err != nil {
-				return nil, errors.New("not a boolean")
-			}
+			s = fmt.Sprint(value)
+		}
+
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, errors.New("not a boolean")
 		}
 		return b, nil
 
