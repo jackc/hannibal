@@ -126,6 +126,30 @@ func TestRequestParamParse(t *testing.T) {
 			result: decimal.NewFromFloat(123),
 		},
 		{
+			desc: "boolean from boolean",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeBoolean,
+			},
+			value:  true,
+			result: true,
+		},
+		{
+			desc: "boolean from string",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeBoolean,
+			},
+			value:  "t",
+			result: true,
+		},
+		{
+			desc: "boolean from number",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeBoolean,
+			},
+			value:  float64(1),
+			result: true,
+		},
+		{
 			desc: "array from untyped array",
 			rp: &server.RequestParam{
 				Type: server.RequestParamTypeArray,
@@ -243,6 +267,14 @@ func TestRequestParamParse(t *testing.T) {
 			},
 			value:  "abc",
 			errStr: "not a number",
+		},
+		{
+			desc: "boolean from non-boolean string",
+			rp: &server.RequestParam{
+				Type: server.RequestParamTypeBoolean,
+			},
+			value:  "abc",
+			errStr: "not a boolean",
 		},
 		{
 			desc: "uuid from non-uuid",

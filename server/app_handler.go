@@ -296,6 +296,7 @@ const (
 	RequestParamTypeInt
 	RequestParamTypeBigint
 	RequestParamTypeDecimal
+	RequestParamTypeBoolean
 	RequestParamTypeUUID
 	RequestParamTypeArray
 	RequestParamTypeObject
@@ -328,6 +329,8 @@ func requestParamFromAppConfig(acrp *appconf.RequestParam) (*RequestParam, error
 		rp.Type = RequestParamTypeBigint
 	case "numeric", "decimal":
 		rp.Type = RequestParamTypeDecimal
+	case "boolean":
+		rp.Type = RequestParamTypeBoolean
 	case "uuid":
 		rp.Type = RequestParamTypeUUID
 	case "array":
@@ -498,6 +501,27 @@ func (rp *RequestParam) Parse(value interface{}) (interface{}, error) {
 			return nil, errors.New("not a number")
 		}
 		return num, nil
+
+	case RequestParamTypeBoolean:
+		var b bool
+		switch value := value.(type) {
+		case bool:
+			b = value
+		case string:
+			var err error
+			b, err = strconv.ParseBool(value)
+			if err != nil {
+				return nil, errors.New("not a boolean")
+			}
+		default:
+			s := fmt.Sprint(value)
+			var err error
+			b, err = strconv.ParseBool(s)
+			if err != nil {
+				return nil, errors.New("not a boolean")
+			}
+		}
+		return b, nil
 
 	case RequestParamTypeUUID:
 		if s, ok := value.(string); ok {
