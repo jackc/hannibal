@@ -15,7 +15,6 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/gorilla/csrf"
-	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
 	"github.com/jackc/pgtype"
 	"golang.org/x/crypto/bcrypt"
@@ -171,17 +170,7 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		delete(queryArgs, h.CheckPasswordDigest.PasswordParam)
 
 		if password, ok := passwordInterface.(string); ok {
-			// May want to dedup this with the main query generate SQL args
-			sqlArgs := make([]interface{}, 0, len(h.CheckPasswordDigest.FuncInArgs))
-			for _, ia := range h.CheckPasswordDigest.FuncInArgs {
-				switch ia {
-				case "args":
-					sqlArgs = append(sqlArgs, queryArgs)
-				case "cookie_session":
-					sqlArgs = append(sqlArgs, requestCookieSession)
-				}
-				current.Logger(ctx).Info().Interface("args", sqlArgs).Msg("sqlArgs")
-			}
+			sqlArgs := buildHTTPSQLArgs(h.CheckPasswordDigest.FuncInArgs, queryArgs, rawArgs, requestCookieSession)
 
 			var passwordDigest []byte
 			err = db.App(ctx).QueryRow(ctx, h.CheckPasswordDigest.SQL, sqlArgs...).Scan(
@@ -196,17 +185,7 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sqlArgs := make([]interface{}, 0, len(h.FuncInArgs))
-	for _, ia := range h.FuncInArgs {
-		switch ia {
-		case "args":
-			sqlArgs = append(sqlArgs, queryArgs)
-		case "raw_args":
-			sqlArgs = append(sqlArgs, rawArgs)
-		case "cookie_session":
-			sqlArgs = append(sqlArgs, requestCookieSession)
-		}
-	}
+	sqlArgs := buildHTTPSQLArgs(h.FuncInArgs, queryArgs, rawArgs, requestCookieSession)
 
 	var status pgtype.Int2
 	var respBody []byte
@@ -291,6 +270,22 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func buildHTTPSQLArgs(funcInArgs []string, queryArgs, rawArgs map[string]interface{}, requestCookieSession []byte) []interface{} {
+	sqlArgs := make([]interface{}, 0, len(funcInArgs))
+	for _, ia := range funcInArgs {
+		switch ia {
+		case "args":
+			sqlArgs = append(sqlArgs, queryArgs)
+		case "raw_args":
+			sqlArgs = append(sqlArgs, rawArgs)
+		case "cookie_session":
+			sqlArgs = append(sqlArgs, requestCookieSession)
+		}
+	}
+
+	return sqlArgs
 }
 
 func NewPGFuncHandler(name string, inArgMap map[string]struct{}, outArgMap map[string]struct{}) (*PGFuncHandler, error) {
