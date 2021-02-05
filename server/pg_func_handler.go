@@ -227,12 +227,6 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if responseHeaders != nil {
-		for k, v := range responseHeaders {
-			w.Header().Add(k, v)
-		}
-	}
-
 	// Only send session cookie response if it has changed from the request.
 	if bytes.Compare(requestCookieSession, responseCookieSession) != 0 {
 		cookie := &http.Cookie{
@@ -280,6 +274,12 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err := tmpl.Execute(respWriter, templateData)
 		if err != nil {
 			panic(err)
+		}
+	}
+
+	if responseHeaders != nil {
+		for k, v := range responseHeaders {
+			w.Header().Add(k, v)
 		}
 	}
 
