@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -254,13 +255,11 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, cookie)
 	}
 
+	var respBodyReader io.Reader
+
 	if respBody != nil {
 		w.Header().Add("Content-Type", "application/json")
-		if status.Status == pgtype.Present {
-			w.WriteHeader(int(status.Int))
-		}
-		w.Write(respBody)
-		return
+		respBodyReader = bytes.NewReader(respBody)
 	}
 
 	if templateName.Status == pgtype.Present {
@@ -275,13 +274,22 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		templateData["csrfField"] = csrf.TemplateField(r)
 
-		if status.Status == pgtype.Present {
-			w.WriteHeader(int(status.Int))
-		}
-		err := tmpl.Execute(w, templateData)
+		respWriter := &bytes.Buffer{}
+		respBodyReader = respWriter
+
+		err := tmpl.Execute(respWriter, templateData)
 		if err != nil {
 			panic(err)
 		}
+	}
+
+	if status.Status == pgtype.Present {
+		w.WriteHeader(int(status.Int))
+	}
+
+	_, err = io.Copy(w, respBodyReader)
+	if err != nil {
+		panic(err)
 	}
 }
 
