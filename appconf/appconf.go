@@ -18,17 +18,17 @@ type Config struct {
 
 type CSRFProtection struct {
 	Disable        bool
-	CookieName     *string `yaml:"cookie-name"`
-	Domain         *string
-	FieldName      *string `yaml:"field-name"`
-	HTTPOnly       *bool   `yaml:"http-only"`
-	MaxAge         *int    `yaml:"max-age"`
-	Path           *string
-	RequestHeader  *string `yaml:"request-header"`
-	SameSite       *string `yaml:"same-site"`
+	CookieName     string `yaml:"cookie-name"`
+	Domain         string
+	FieldName      string `yaml:"field-name"`
+	HTTPOnly       *bool  `yaml:"http-only"`
+	MaxAge         *int   `yaml:"max-age"`
+	Path           string
+	RequestHeader  string `yaml:"request-header"`
+	SameSite       string `yaml:"same-site"`
 	Secure         *bool
 	TrustedOrigins []string `yaml:"trusted-origins"`
-	ErrorFunc      *string  `yaml:"error-func"`
+	ErrorFunc      string   `yaml:"error-func"`
 }
 
 type Route struct {

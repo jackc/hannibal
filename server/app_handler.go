@@ -222,14 +222,14 @@ func makeCSRFFunc(ctx context.Context, dbconn db.DBConn, schema string, csrfProt
 	}
 
 	options := []csrf.Option{}
-	if csrfProtectionConfig.CookieName != nil {
-		options = append(options, csrf.CookieName(*csrfProtectionConfig.CookieName))
+	if csrfProtectionConfig.CookieName != "" {
+		options = append(options, csrf.CookieName(csrfProtectionConfig.CookieName))
 	}
-	if csrfProtectionConfig.Domain != nil {
-		options = append(options, csrf.Domain(*csrfProtectionConfig.Domain))
+	if csrfProtectionConfig.Domain != "" {
+		options = append(options, csrf.Domain(csrfProtectionConfig.Domain))
 	}
-	if csrfProtectionConfig.ErrorFunc != nil {
-		errorFunc := *csrfProtectionConfig.ErrorFunc
+	if csrfProtectionConfig.ErrorFunc != "" {
+		errorFunc := csrfProtectionConfig.ErrorFunc
 		inArgs, outArgs, err := getSQLFuncArgs(ctx, dbconn, schema, errorFunc)
 		if err != nil {
 			return nil, err
@@ -245,8 +245,8 @@ func makeCSRFFunc(ctx context.Context, dbconn db.DBConn, schema string, csrfProt
 
 		options = append(options, csrf.ErrorHandler(h))
 	}
-	if csrfProtectionConfig.FieldName != nil {
-		options = append(options, csrf.FieldName(*csrfProtectionConfig.FieldName))
+	if csrfProtectionConfig.FieldName != "" {
+		options = append(options, csrf.FieldName(csrfProtectionConfig.FieldName))
 	}
 	if csrfProtectionConfig.HTTPOnly != nil {
 		options = append(options, csrf.HttpOnly(*csrfProtectionConfig.HTTPOnly))
@@ -254,16 +254,16 @@ func makeCSRFFunc(ctx context.Context, dbconn db.DBConn, schema string, csrfProt
 	if csrfProtectionConfig.MaxAge != nil {
 		options = append(options, csrf.MaxAge(*csrfProtectionConfig.MaxAge))
 	}
-	if csrfProtectionConfig.Path != nil {
-		options = append(options, csrf.Path(*csrfProtectionConfig.Path))
+	if csrfProtectionConfig.Path != "" {
+		options = append(options, csrf.Path(csrfProtectionConfig.Path))
 	} else {
 		options = append(options, csrf.Path("/"))
 	}
-	if csrfProtectionConfig.RequestHeader != nil {
-		options = append(options, csrf.RequestHeader(*csrfProtectionConfig.RequestHeader))
+	if csrfProtectionConfig.RequestHeader != "" {
+		options = append(options, csrf.RequestHeader(csrfProtectionConfig.RequestHeader))
 	}
-	if csrfProtectionConfig.SameSite != nil {
-		ssLowerStr := strings.ToLower(*csrfProtectionConfig.SameSite)
+	if csrfProtectionConfig.SameSite != "" {
+		ssLowerStr := strings.ToLower(csrfProtectionConfig.SameSite)
 		var ssm csrf.SameSiteMode
 		switch ssLowerStr {
 		case "none":
@@ -273,7 +273,7 @@ func makeCSRFFunc(ctx context.Context, dbconn db.DBConn, schema string, csrfProt
 		case "strict":
 			ssm = csrf.SameSiteStrictMode
 		default:
-			return nil, fmt.Errorf("bad csrf-protection.same-site value: %s", *csrfProtectionConfig.SameSite)
+			return nil, fmt.Errorf("bad csrf-protection.same-site value: %s", csrfProtectionConfig.SameSite)
 		}
 
 		options = append(options, csrf.SameSite(ssm))
