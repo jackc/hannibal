@@ -91,3 +91,7 @@ routes:
     func: http_get_cookie_session
   - post: /cookie_session
     func: http_set_cookie_session
+  - get: /status_200_when_missing
+    func: http_status_200_when_missing
+  - get: /status_200_when_null
+    func: http_status_200_when_null

@@ -944,6 +944,20 @@ func TestHTTPResponseHeaders(t *testing.T) {
 	assert.Equal(t, "bar", response.Header.Get("foo"))
 }
 
+func TestHTTPStatus(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	apiClient := newAPIClient(t, hi.httpAddr)
+	response := apiClient.get(t, "/status_200_when_missing")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+
+	response = apiClient.get(t, "/status_200_when_null")
+	require.EqualValues(t, http.StatusOK, response.StatusCode)
+}
+
 func TestCSRFProtection(t *testing.T) {
 	t.Parallel()
 
