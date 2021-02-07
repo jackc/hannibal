@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/hannibal/deploy"
 	"github.com/jackc/hannibal/srvman"
 	"github.com/jackc/hannibal/system"
+	"github.com/jackc/numfmt"
 	"github.com/jackc/pgx/v4"
 	"golang.org/x/sync/errgroup"
 )
@@ -356,7 +357,9 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 }
 
 func loadTemplates(rootPath string) (*template.Template, error) {
-	rootTmpl := template.New("root").Funcs(sprig.HtmlFuncMap())
+	rootTmpl := template.New("root").Funcs(sprig.HtmlFuncMap()).Funcs(template.FuncMap{
+		"numfmt": numfmt.TemplateFunc,
+	})
 
 	walkFunc := func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
