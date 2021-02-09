@@ -266,9 +266,11 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(int(status.Int))
 	}
 
-	_, err = io.Copy(w, respBodyReader)
-	if err != nil {
-		panic(err)
+	if respBodyReader != nil {
+		_, err = io.Copy(w, respBodyReader)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
