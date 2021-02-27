@@ -82,8 +82,14 @@ type HealthCheck struct {
 	TCPConnect string `yaml:"tcp-connect"`
 }
 
+type Exec struct {
+	Cmd  string
+	Args []string `yaml:",flow"`
+}
+
 type Deploy struct {
 	IgnorePaths []string `yaml:"ignore-paths"`
+	ExecLocal   *Exec    `yaml:"exec-local"`
 }
 
 func (c *Config) Merge(other *Config) {

@@ -1,3 +1,4 @@
 /.envrc
 /tmp
 /srvman/tmp
+/testdata/testproject/exec-local.txt

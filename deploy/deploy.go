@@ -16,6 +16,7 @@ import (
 	"net/textproto"
 	urlpkg "net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -42,6 +43,16 @@ func Deploy(ctx context.Context, url, apiKey, deployKey, projectPath string, htt
 	appConfig, err := appconf.Load(configPath)
 	if err != nil {
 		return err
+	}
+
+	if appConfig.Deploy != nil && appConfig.Deploy.ExecLocal != nil {
+		execLocal := appConfig.Deploy.ExecLocal
+		cmd := exec.CommandContext(ctx, execLocal.Cmd, execLocal.Args...)
+		cmd.Dir = projectPath
+		err := cmd.Run()
+		if err != nil {
+			return fmt.Errorf("deploy.exec-local failed: %w", err)
+		}
 	}
 
 	var ignorePaths []string

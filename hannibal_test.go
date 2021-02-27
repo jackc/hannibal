@@ -1068,3 +1068,17 @@ func TestDeployIgnoredPaths(t *testing.T) {
 	var pathError *os.PathError
 	require.ErrorAsf(t, err, &pathError, "ignored file was deployed")
 }
+
+func TestDeployExecLocal(t *testing.T) {
+	// Ensure file that build process should create doesn't exist
+	os.Remove(filepath.Join("testdata", "testproject", "exec-local.txt"))
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	// Clean up file that build process should create
+	defer os.Remove(filepath.Join("testdata", "testproject", "exec-local.txt"))
+
+	_, err := os.Stat(filepath.Join(hi.appPath, "current", "exec-local.txt"))
+	require.NoError(t, err)
+}
