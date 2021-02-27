@@ -1082,3 +1082,17 @@ func TestDeployExecLocal(t *testing.T) {
 	_, err := os.Stat(filepath.Join(hi.appPath, "current", "exec-local.txt"))
 	require.NoError(t, err)
 }
+
+func TestDeployExecRemote(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	_, err := os.Stat(filepath.Join("testdata", "testproject", "exec-remote.txt"))
+	var pathError *os.PathError
+	require.ErrorAsf(t, err, &pathError, "remote build artifact found locally")
+
+	_, err = os.Stat(filepath.Join(hi.appPath, "current", "exec-remote.txt"))
+	require.NoError(t, err)
+}

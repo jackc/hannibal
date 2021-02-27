@@ -5,6 +5,10 @@ deploy:
     cmd: touch
     args:
       - exec-local.txt
+  exec-remote:
+    cmd: touch
+    args:
+      - exec-remote.txt
 csrf-protection:
   secure: false # no SSL while testing
   error-func: http_handle_csrf_failure

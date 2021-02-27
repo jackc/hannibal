@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -263,6 +264,18 @@ func (h *Host) handleDeploy(w http.ResponseWriter, req *http.Request) {
 		current.Logger(ctx).Error().Caller().Err(err).Send()
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
+	}
+
+	if appConfig.Deploy != nil && appConfig.Deploy.ExecRemote != nil {
+		execRemote := appConfig.Deploy.ExecRemote
+		cmd := exec.CommandContext(ctx, execRemote.Cmd, execRemote.Args...)
+		cmd.Dir = nextPath
+		err := cmd.Run()
+		if err != nil {
+			current.Logger(ctx).Error().Caller().Err(err).Msg("exec-remote failed")
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	dbconfig := db.GetConfig(ctx)

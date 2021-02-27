@@ -90,6 +90,7 @@ type Exec struct {
 type Deploy struct {
 	IgnorePaths []string `yaml:"ignore-paths"`
 	ExecLocal   *Exec    `yaml:"exec-local"`
+	ExecRemote  *Exec    `yaml:"exec-remote"`
 }
 
 func (c *Config) Merge(other *Config) {
