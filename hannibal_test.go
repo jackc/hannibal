@@ -1057,3 +1057,14 @@ func TestReverseProxyCSRFProtection(t *testing.T) {
 	responseBody := string(readResponseBody(t, response))
 	assert.Contains(t, responseBody, "Custom CRSF failure message.")
 }
+
+func TestDeployIgnoredPaths(t *testing.T) {
+	t.Parallel()
+
+	hi, cleanup := runHannibalServe(t, filepath.Join("testdata", "testproject"))
+	defer cleanup()
+
+	_, err := os.Stat(filepath.Join(hi.appPath, "current", "ignored.txt"))
+	var pathError *os.PathError
+	require.ErrorAsf(t, err, &pathError, "ignored file was deployed")
+}

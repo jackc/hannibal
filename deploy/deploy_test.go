@@ -18,7 +18,7 @@ import (
 )
 
 func TestPackageWriterWriteTo(t *testing.T) {
-	pw, err := newPackageWriter("testdata")
+	pw, err := newPackageWriter("testdata", nil)
 	require.NoError(t, err)
 
 	buf := &bytes.Buffer{}
@@ -31,8 +31,22 @@ func TestPackageWriterWriteTo(t *testing.T) {
 	assert.Equal(t, "2f976cb7f997d0c1cf09466d660e5304a17260e3d7b8016a3da0c3d02a924683", hex.EncodeToString(digest[:]))
 }
 
-func makePackage(t *testing.T, path string) (io.ReadSeeker, []byte) {
-	pw, err := newPackageWriter("testdata")
+func TestPackageWriterWriteToIgnoredPaths(t *testing.T) {
+	pw, err := newPackageWriter("testdata", []string{"hello.txt"})
+	require.NoError(t, err)
+
+	buf := &bytes.Buffer{}
+	size, err := pw.WriteTo(buf)
+	require.NoError(t, err)
+	assert.EqualValues(t, 389, size)
+	assert.EqualValues(t, buf.Len(), size)
+
+	digest := sha512.Sum512_256(buf.Bytes())
+	assert.Equal(t, "6b5ec6a7dce5c40f35d138a7fdc416e3a9cd58ff322003128ffb35ec61323bfc", hex.EncodeToString(digest[:]))
+}
+
+func makePackage(t *testing.T, path string, ignorePaths []string) (io.ReadSeeker, []byte) {
+	pw, err := newPackageWriter("testdata", ignorePaths)
 	require.NoError(t, err)
 
 	buf := &bytes.Buffer{}
@@ -84,7 +98,7 @@ func assertEqualFiles(t testing.TB, expectedPath, actualPath string) bool {
 }
 
 func TestUnpack(t *testing.T) {
-	pkg, digest := makePackage(t, "testdata")
+	pkg, digest := makePackage(t, "testdata", nil)
 
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
@@ -105,7 +119,7 @@ func TestUnpack(t *testing.T) {
 }
 
 func TestUnpackRejectsInvalidSignature(t *testing.T) {
-	pkg, digest := makePackage(t, "testdata")
+	pkg, digest := makePackage(t, "testdata", nil)
 
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
@@ -119,7 +133,7 @@ func TestUnpackRejectsInvalidSignature(t *testing.T) {
 }
 
 func TestUnpackToMissingDirectory(t *testing.T) {
-	pkg, digest := makePackage(t, "testdata")
+	pkg, digest := makePackage(t, "testdata", nil)
 
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)

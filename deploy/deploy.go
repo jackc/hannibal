@@ -19,6 +19,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/jackc/hannibal/appconf"
 )
 
 var ErrInvalidSignature = errors.New("invalid signature")
@@ -36,7 +38,18 @@ func Deploy(ctx context.Context, url, apiKey, deployKey, projectPath string, htt
 	}
 	privateKey := ed25519.NewKeyFromSeed(deployKeySeed)
 
-	pkgSrc, err := newPackageWriter(projectPath)
+	configPath := filepath.Join(projectPath, "config")
+	appConfig, err := appconf.Load(configPath)
+	if err != nil {
+		return err
+	}
+
+	var ignorePaths []string
+	if appConfig.Deploy != nil {
+		ignorePaths = appConfig.Deploy.IgnorePaths
+	}
+
+	pkgSrc, err := newPackageWriter(projectPath, ignorePaths)
 	if err != nil {
 		return err
 	}
@@ -130,7 +143,7 @@ type packageWriter struct {
 	files []packageWriterFile
 }
 
-func newPackageWriter(pkgPath string) (*packageWriter, error) {
+func newPackageWriter(pkgPath string, ignorePaths []string) (*packageWriter, error) {
 	pkg := &packageWriter{path: pkgPath}
 
 	hasSQLManifest := false
@@ -149,6 +162,12 @@ func newPackageWriter(pkgPath string) (*packageWriter, error) {
 			return nil
 		}
 		pkgRelPath = pkgRelPath[1:] // remove "/"
+
+		for _, ignorePath := range ignorePaths {
+			if strings.HasPrefix(pkgRelPath, ignorePath) {
+				return nil
+			}
+		}
 
 		if !hasSQLManifest && pkgRelPath == "sql/manifest.conf" {
 			hasSQLManifest = true

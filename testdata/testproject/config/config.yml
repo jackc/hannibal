@@ -1,3 +1,6 @@
+deploy:
+  ignore-paths:
+    - ignored.txt
 csrf-protection:
   secure: false # no SSL while testing
   error-func: http_handle_csrf_failure

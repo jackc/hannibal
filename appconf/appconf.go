@@ -14,6 +14,7 @@ type Config struct {
 	CSRFProtection *CSRFProtection `yaml:"csrf-protection"`
 	Routes         []Route
 	Services       []*Service
+	Deploy         *Deploy
 }
 
 type CSRFProtection struct {
@@ -81,9 +82,16 @@ type HealthCheck struct {
 	TCPConnect string `yaml:"tcp-connect"`
 }
 
+type Deploy struct {
+	IgnorePaths []string `yaml:"ignore-paths"`
+}
+
 func (c *Config) Merge(other *Config) {
 	if other.CSRFProtection != nil {
 		c.CSRFProtection = other.CSRFProtection
+	}
+	if other.Deploy != nil {
+		c.Deploy = other.Deploy
 	}
 	c.Routes = append(c.Routes, other.Routes...)
 	c.Services = append(c.Services, other.Services...)
