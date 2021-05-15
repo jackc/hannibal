@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -82,6 +84,21 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 		return nil, err
 	}
 
+	csrfWithPreserveBodyFunc := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				// TODO - handle failure reading body
+				panic(err)
+			}
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			csrfFunc(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				h.ServeHTTP(w, r)
+			})).ServeHTTP(w, r)
+		})
+	}
+
 	router := chi.NewRouter()
 	for _, r := range appConfig.Routes {
 		if !routeHasOnePath(r) {
@@ -93,6 +110,7 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 		}
 
 		var handler http.Handler
+		var preserveBody bool
 
 		if r.Func != "" {
 			inArgs, outArgs, err := getSQLFuncArgs(ctx, dbconn, schema, r.Func)
@@ -184,12 +202,17 @@ func NewAppHandler(ctx context.Context, dbconn db.DBConn, schema string, appConf
 			}
 
 			handler = rp
+			preserveBody = true
 		} else {
 			panic("no handler config") // This should be unreachable due to routeHasOneHandler check above.
 		}
 
 		if csrfFunc != nil && !r.DisableCSRFProtection {
-			handler = csrfFunc(handler)
+			if preserveBody {
+				handler = csrfWithPreserveBodyFunc(handler)
+			} else {
+				handler = csrfFunc(handler)
+			}
 		}
 
 		if r.GetPath != "" {
