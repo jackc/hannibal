@@ -11,9 +11,10 @@ require (
 	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/securecookie v1.1.1
 	github.com/jackc/numfmt v0.0.0-20210209201056-0429016d44dd
-	github.com/jackc/pgconn v1.7.2
-	github.com/jackc/pgtype v1.6.1
-	github.com/jackc/pgx/v4 v4.9.2
+	github.com/jackc/pgconn v1.8.1
+	github.com/jackc/pgproto3/v2 v2.0.7 // indirect
+	github.com/jackc/pgtype v1.7.0
+	github.com/jackc/pgx/v4 v4.11.0
 	github.com/jackc/pgxutil v0.0.0-20200703204206-37866e09a15b
 	github.com/jackc/tern v1.12.2-0.20201114153106-63d7d76ed638
 	github.com/mitchellh/go-homedir v1.1.0
@@ -24,8 +25,9 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.7.0
-	golang.org/x/crypto v0.0.0-20201112155050-0c6587e931a9
-	golang.org/x/net v0.0.0-20190813141303-74dc4d7220e7
-	golang.org/x/sync v0.0.0-20190423024810-112230192c58
+	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a
+	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
+	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+	golang.org/x/text v0.3.6 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 )
