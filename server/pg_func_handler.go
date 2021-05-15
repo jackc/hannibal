@@ -15,7 +15,9 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/gorilla/csrf"
+	"github.com/jackc/hannibal/current"
 	"github.com/jackc/hannibal/db"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgtype"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -203,7 +205,51 @@ func (h *PGFuncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		&responseHeaders,
 	)
 	if err != nil {
-		panic(err)
+		// TODO - need to be able to report errors somehow
+
+		event := current.Logger(ctx).Error().Caller().Err(err)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			event.Str("pgSeverity", pgErr.Severity)
+			event.Str("pgCode", pgErr.Code)
+			event.Str("pgMessage", pgErr.Message)
+			if pgErr.Detail != "" {
+				event.Str("pgDetail", pgErr.Detail)
+			}
+			if pgErr.Hint != "" {
+				event.Str("pgHint", pgErr.Hint)
+			}
+			if pgErr.Position != 0 {
+				event.Int32("pgPosition", pgErr.Position)
+			}
+			if pgErr.InternalPosition != 0 {
+				event.Int32("pgInternalPosition", pgErr.InternalPosition)
+			}
+			if pgErr.InternalQuery != "" {
+				event.Str("pgInternalQuery", pgErr.InternalQuery)
+			}
+			if pgErr.Where != "" {
+				event.Str("pgWhere", pgErr.Where)
+			}
+			if pgErr.SchemaName != "" {
+				event.Str("pgSchemaName", pgErr.SchemaName)
+			}
+			if pgErr.TableName != "" {
+				event.Str("pgTableName", pgErr.TableName)
+			}
+			if pgErr.ColumnName != "" {
+				event.Str("pgColumnName", pgErr.ColumnName)
+			}
+			if pgErr.DataTypeName != "" {
+				event.Str("pgDataTypeName", pgErr.DataTypeName)
+			}
+			if pgErr.ConstraintName != "" {
+				event.Str("pgConstraintName", pgErr.ConstraintName)
+			}
+		}
+		event.Send()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
 
 	// Only send session cookie response if it has changed from the request.
